@@ -16,11 +16,8 @@ class User(AbstractUser):
     password = models.CharField(max_length=128)
     role = models.CharField(max_length=16, choices=ROLE_CHOICES, default="USER")
 
-    # is_active = models.BooleanField(default=True)
-    # is_staff = models.BooleanField(default=False)
-
     objects = CustomUserManager()
 
-    USERNAME_FIELD = 'username'
+    USERNAME_FIELD = 'email'
     EMAIL_FIELD = 'email'
-    REQUIRED_FIELDS = ['email']
+    REQUIRED_FIELDS = ['username']

@@ -10,5 +10,4 @@ class UserAdmin(UserAdmin):
     search_fields = ("id", "username", "email", "role")
 
 
-
 admin.site.register(User, UserAdmin)

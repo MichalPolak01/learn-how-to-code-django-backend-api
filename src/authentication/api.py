@@ -1,16 +1,19 @@
 from ninja import Router
 from django.contrib.auth.hashers import make_password
 from django.core.exceptions import ValidationError
+from django.contrib.auth import authenticate
+from ninja.errors import HttpError
+from ninja_jwt.tokens import RefreshToken
 
 from .models import User
-from .schemas import UserCreateSchema, UserDetailSchema, MessageSchema
-
+from .schemas import RegisterSchema, UserDetailSchema, MessageSchema, LoginSchema, UserUpdateSchema
+import helpers
 
 router = Router()
 
 
 @router.post("/register", response= {201: UserDetailSchema, 400: MessageSchema})
-def register(request, payload: UserCreateSchema):
+def register(request, payload: RegisterSchema):
     try:
         if User.objects.filter(email=payload.email).exists():
             return 400, {"message": "Email is already registered."}
@@ -29,3 +32,20 @@ def register(request, payload: UserCreateSchema):
         return 400, {"message": str(e)}
     except Exception as e:
         return 400, {"message": "An unexpected error occurred."}
+    
+
+@router.post("/login", response={200: dict, 401: MessageSchema})
+def login(request, payload: LoginSchema):
+    user = authenticate(request, email=payload.email, password=payload.password)
+
+    if user is None:
+        return 401, {"message": "Invalid email or password"}
+    
+    refresh = RefreshToken.for_user(user)
+
+    return {
+        "refresh": str(refresh),
+        "access": str(refresh.access_token),
+        "username": user.username
+    }
+

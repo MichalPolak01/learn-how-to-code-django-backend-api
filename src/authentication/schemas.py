@@ -1,9 +1,10 @@
 from ninja import Schema
 from pydantic import EmailStr, Field, field_validator
+from typing import Optional
 import re
 
 
-class UserCreateSchema(Schema):
+class RegisterSchema(Schema):
     username: str = Field(min_length=3, max_length=64)
     email: EmailStr
     password: str = Field(min_length=8)
@@ -11,25 +12,16 @@ class UserCreateSchema(Schema):
 
     @field_validator("password")
     def validate_password(cls, value):       
-        if not re.search(r'[A-Z]', value):
-            raise ValueError("Password must contain at least one uppercase letter")
+        return validate_password(value)
         
-        if not re.search(r'[0-9]', value):
-            raise ValueError("Password must contain at least one digit")
-        
-        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', value):
-            raise ValueError("Password must contain at least one special character")
-        
-        return value
-    
     @field_validator("role")
     def validate_role(cls, value):
-        allowed_roles = ["USER", "TEACHER", "ADMIN"]
+        return validate_role(value)
 
-        if value not in allowed_roles:
-            raise ValueError(f"Invalid role: {value}")
-
-        return value
+    
+class LoginSchema(Schema):
+    email: EmailStr
+    password: str
     
 
 class UserDetailSchema(Schema):
@@ -41,3 +33,39 @@ class UserDetailSchema(Schema):
 
 class MessageSchema(Schema):
     message: str
+
+
+class UserUpdateSchema(Schema):
+    username: Optional[str] = None
+    email: Optional[str] = None
+    role: Optional[str] = None
+
+    @field_validator("role")
+    def validate_role(cls, value):
+        return validate_role(value)
+
+    
+
+
+
+# Validators
+def validate_role(value):
+    allowed_roles = ["USER", "TEACHER", "ADMIN"]
+
+    if value not in allowed_roles:
+        raise ValueError(f"Invalid role: {value}")
+
+    return value
+
+
+def validate_password(value):       
+    if not re.search(r'[A-Z]', value):
+        raise ValueError("Password must contain at least one uppercase letter")
+    
+    if not re.search(r'[0-9]', value):
+        raise ValueError("Password must contain at least one digit")
+    
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', value):
+        raise ValueError("Password must contain at least one special character")
+    
+    return value
