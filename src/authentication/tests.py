@@ -1,5 +1,6 @@
 from django.test import TestCase
 from ninja_extra.testing import TestClient
+from ninja_jwt.tokens import RefreshToken
 import pytest
 from .api import router
 from .models import User
@@ -9,8 +10,15 @@ class NinjaAuthenticationTestCase(TestCase):
     def setUp(self):
         self.client = TestClient(router)
 
-        self.user = User.objects.create_user(username='JohnDoe123', email='johndoe@gmail.com', password='JohnDoe@!3')
+        self.user = User.objects.create_user(username='JohnDoe123', email='johndoe@gmail.com', password='JohnDoe@!3', role='USER')
+        self.user2 = User.objects.create_user(username='BobJohnson123', email='bobjohnson@gmail.com', password='BobJohnson#23', role='TEACHER')
 
+
+    def get_access_token(self):
+        """Helper function to get JWT token for the test user"""
+
+        refresh = RefreshToken.for_user(self.user)
+        return str(refresh.access_token)
 
     @pytest.mark.django_db
     def test_login_success(self):
@@ -287,3 +295,77 @@ class NinjaAuthenticationTestCase(TestCase):
         # Assert
         assert response.status_code == 422
         assert response.json()['detail'][0]['msg'] == "Value error, Invalid role: " + payload['role']
+
+
+    @pytest.mark.dajngo_db
+    def test_update_user_success(self):
+        """Test that an authenticated user can update their data"""
+
+        # Arrange
+        token = self.get_access_token()
+        payload = {
+            'username': 'JohnDoe99',
+            'email': 'johndoe99@gmail.com'
+        }
+
+        # Act
+        response = self.client.patch('/user/update', json=payload, headers={'Authorization': f'Bearer {token}'})
+
+        # Assert
+        assert response.status_code == 200
+        assert response.json()['username'] == 'JohnDoe99'
+        assert response.json()['email'] == 'johndoe99@gmail.com'
+
+
+    @pytest.mark.dajngo_db
+    def test_update_user_without_token(self):
+        """Test user update their data without token"""
+
+        # Arrange
+        payload = {
+            'username': 'JohnDoe99',
+            'email': 'johndoe99@gmail.com'
+        }
+
+        # Act
+        response = self.client.patch('/user/update', json=payload)
+
+        # Assert
+        assert response.status_code == 401
+        assert response.json()['detail'] == 'Unauthorized'
+
+
+    @pytest.mark.dajngo_db
+    def test_update_user_with_duplicate_username(self):
+        """Test user update their data with duplicate username"""
+
+        # Arrange
+        token = self.get_access_token()
+        payload = {
+            'username': 'BobJohnson123'
+        }
+
+        # Act
+        response = self.client.patch('/user/update', json=payload, headers={'Authorization': f'Bearer {token}'})
+
+        # Assert
+        assert response.status_code == 400
+        assert response.json()['message'] == 'Username is already taken.'
+
+
+    @pytest.mark.dajngo_db
+    def test_update_user_with_duplicate_email(self):
+        """Test user update their data with duplicate email"""
+
+        # Arrange
+        token = self.get_access_token()
+        payload = {
+            'email': 'bobjohnson@gmail.com'
+        }
+
+        # Act
+        response = self.client.patch('/user/update', json=payload, headers={'Authorization': f'Bearer {token}'})
+
+        # Assert
+        assert response.status_code == 400
+        assert response.json()['message'] == 'Email is already taken.'

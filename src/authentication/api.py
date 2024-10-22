@@ -2,7 +2,6 @@ from ninja import Router
 from django.contrib.auth.hashers import make_password, check_password
 from django.core.exceptions import ValidationError
 from django.contrib.auth import authenticate
-from ninja.errors import HttpError
 from ninja_jwt.tokens import RefreshToken
 
 from .models import User
