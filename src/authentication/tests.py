@@ -369,3 +369,63 @@ class NinjaAuthenticationTestCase(TestCase):
         # Assert
         assert response.status_code == 400
         assert response.json()['message'] == 'Email is already taken.'
+
+
+    @pytest.mark.dajngo_db
+    def test_change_password_success(self):
+        """Test user change password with vaild data"""
+
+        # Arrange
+        token = self.get_access_token()
+        payload = {
+            "old_password": "JohnDoe@!3",
+            "new_password": "JohnDoe@$5",
+            "confirm_password": "JohnDoe@$5"
+        }
+
+        # Act
+        response = self.client.post('/user/change-password', json=payload, headers={'Authorization': f'Bearer {token}'})
+
+        # Assert
+        assert response.status_code == 200
+        assert response.json()['message'] == 'Password changed successfully.'
+
+
+    @pytest.mark.dajngo_db
+    def test_change_password_with_wrong_old_password(self):
+        """Test user change password with wrong old password"""
+
+        # Arrange
+        token = self.get_access_token()
+        payload = {
+            "old_password": "JohnDoe@!123",
+            "new_password": "JohnDoe@$5",
+            "confirm_password": "JohnDoe@$5"
+        }
+
+        # Act
+        response = self.client.post('/user/change-password', json=payload, headers={'Authorization': f'Bearer {token}'})
+
+        # Assert
+        assert response.status_code == 400
+        assert response.json()['message'] == 'Old password incorrect.'
+
+
+    @pytest.mark.dajngo_db
+    def test_change_password_with_mismatched_passwords(self):
+        """Test user change password when the new passwords do not match"""
+
+        # Arrange
+        token = self.get_access_token()
+        payload = {
+            "old_password": "JohnDoe@!3",
+            "new_password": "JohnDoe@$1234",
+            "confirm_password": "JohnDoe@$5"
+        }
+
+        # Act
+        response = self.client.post('/user/change-password', json=payload, headers={'Authorization': f'Bearer {token}'})
+
+        # Assert
+        assert response.status_code == 400
+        assert response.json()['message'] == 'New passwords do not match.'
