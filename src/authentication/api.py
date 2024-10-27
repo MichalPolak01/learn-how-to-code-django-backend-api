@@ -15,10 +15,12 @@ router = Router()
 def register(request, payload: RegisterSchema):
     try:
         if User.objects.filter(email=payload.email).exists():
-            return 400, {"message": "Email is already registered."}
+            # return 400, {"message": "Email is already registered."}
+            return 400, {"message": "Podany email jest już używany."}
         
         if User.objects.filter(username=payload.username).exists():
-            return 400, {"message": "Username is already registered."}
+            # return 400, {"message": "Username is already registered."}
+            return 400, {"message": "Podana nazwa użytkownika jest już używana."}
 
         user_data = payload.dict()
 
@@ -49,7 +51,17 @@ def login(request, payload: LoginSchema):
     }
 
 
-@router.patch("/user/update", response={200: UserDetailSchema, 400: MessageSchema}, auth=helpers.auth_required)
+@router.get("/user", response={200: UserDetailSchema, 400: MessageSchema}, auth=helpers.auth_required)
+def get_user(request):
+    try:
+        user = request.user
+
+        return 200, user
+    except Exception as e:
+        return 400, {"message": "An unexpected error occurred."}
+
+
+@router.patch("/user", response={200: UserDetailSchema, 400: MessageSchema}, auth=helpers.auth_required)
 def update_user(request, payload: UserUpdateSchema):
     try:
         user = request.user
