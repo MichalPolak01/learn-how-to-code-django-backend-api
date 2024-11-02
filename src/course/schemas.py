@@ -22,6 +22,10 @@ class CourseCreateSchema(Schema):
     name: str
     description: str
 
+class CourseUpdateSchema(Schema):
+    name: Optional[str]
+    description: Optional[str]
+
 
 class RatingSchemaResponse(Schema):
     score: int
