@@ -8,7 +8,7 @@ import helpers
 router = Router()
 
 
-@router.post("", response={201: CourseDetailSchema, 400: MessageSchema}, auth=helpers.auth_required)
+@router.post("", response={201: CourseDetailSchema, 400: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def create_course(request, payload: CourseCreateSchema):
     """
         Endpoint to create a new course.
@@ -32,4 +32,16 @@ def create_course(request, payload: CourseCreateSchema):
 
         return 201, course.to_dict()
     except Exception as e:
-        return 400, {"message": "An unexpected error occurred during course creation."}
+        return 500, {"message": "An unexpected error occurred during course creation."}
+    
+
+@router.get('/{course_id}', response={200: CourseDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def get_course(request, course_id:int):
+    try:
+        course = Course.objects.get(id=course_id)
+        
+        return 200, course.to_dict()
+    except Course.DoesNotExist:
+        return 404, {"message": f"Course with id {course_id} doesn't exist."}
+    except Exception as e:
+        return 500, {"message": "An unexpected error occurred during course getting."}
