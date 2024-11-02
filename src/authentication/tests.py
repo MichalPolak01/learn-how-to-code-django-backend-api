@@ -298,6 +298,37 @@ class NinjaAuthenticationTestCase(TestCase):
 
 
     @pytest.mark.dajngo_db
+    def test_get_user_success(self):
+        """Test that an authenticated user can get their data"""
+
+        # Arrange
+        token = self.get_access_token()
+
+        # Act
+        response = self.client.get('/user', headers={'Authorization': f'Bearer {token}'})
+
+        # Assert
+        assert response.status_code == 200
+        assert response.json()['username'] == 'JohnDoe123'
+        assert response.json()['email'] == 'johndoe@gmail.com'
+        assert response.json()['role'] == 'USER'
+
+
+    @pytest.mark.dajngo_db
+    def test_get_user_without_token(self):
+        """Test user get their data without token"""
+
+        # Arrange
+
+        # Act
+        response = self.client.get('/user')
+
+        # Assert
+        assert response.status_code == 401
+        assert response.json()['detail'] == 'Unauthorized'
+
+
+    @pytest.mark.dajngo_db
     def test_update_user_success(self):
         """Test that an authenticated user can update their data"""
 
@@ -309,7 +340,7 @@ class NinjaAuthenticationTestCase(TestCase):
         }
 
         # Act
-        response = self.client.patch('/user/update', json=payload, headers={'Authorization': f'Bearer {token}'})
+        response = self.client.patch('/user', json=payload, headers={'Authorization': f'Bearer {token}'})
 
         # Assert
         assert response.status_code == 200
@@ -328,7 +359,7 @@ class NinjaAuthenticationTestCase(TestCase):
         }
 
         # Act
-        response = self.client.patch('/user/update', json=payload)
+        response = self.client.patch('/user', json=payload)
 
         # Assert
         assert response.status_code == 401
@@ -346,7 +377,7 @@ class NinjaAuthenticationTestCase(TestCase):
         }
 
         # Act
-        response = self.client.patch('/user/update', json=payload, headers={'Authorization': f'Bearer {token}'})
+        response = self.client.patch('/user', json=payload, headers={'Authorization': f'Bearer {token}'})
 
         # Assert
         assert response.status_code == 400
@@ -364,7 +395,7 @@ class NinjaAuthenticationTestCase(TestCase):
         }
 
         # Act
-        response = self.client.patch('/user/update', json=payload, headers={'Authorization': f'Bearer {token}'})
+        response = self.client.patch('/user', json=payload, headers={'Authorization': f'Bearer {token}'})
 
         # Assert
         assert response.status_code == 400

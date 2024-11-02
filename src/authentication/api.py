@@ -15,12 +15,10 @@ router = Router()
 def register(request, payload: RegisterSchema):
     try:
         if User.objects.filter(email=payload.email).exists():
-            # return 400, {"message": "Email is already registered."}
-            return 400, {"message": "Podany email jest już używany."}
+            return 400, {"message": "Email is already registered."}
         
         if User.objects.filter(username=payload.username).exists():
-            # return 400, {"message": "Username is already registered."}
-            return 400, {"message": "Podana nazwa użytkownika jest już używana."}
+            return 400, {"message": "Username is already registered."}
 
         user_data = payload.dict()
 
