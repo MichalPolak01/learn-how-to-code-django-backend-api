@@ -1,13 +1,12 @@
 from django.db import models
-from django.contrib.auth import get_user_model
 
-User = get_user_model()
+from authentication.models import User
 
 
 class Course(models.Model):
-    name = models.CharField(max_length=255)
-    description = models.TextField()
-    author = models.ForeignKey(User, on_delete=models.SET_NULL, related_name='courses')
+    name = models.CharField(max_length=255, unique=True)
+    description = models.TextField(blank=True)
+    author = models.ForeignKey(User, default=1, on_delete=models.SET_DEFAULT, related_name='courses')
     last_updated = models.DateTimeField(auto_now=True)
     is_public = models.BooleanField(default=False)
     rating = models.FloatField(default=0.0)
@@ -26,12 +25,24 @@ class Course(models.Model):
             return sum(rating.score for rating in ratings) / ratings.count()
         return 0.0
 
-        # TODO Modules and lesson stats
-    # def get_module_count(self):
-    #     return self.module.count()
-    
-    # def get_lesson_count(self):
-    #     return self.lesson.count()
+    def get_lesson_count(self):
+        try:
+            return self.lesson.count()
+        except:
+            return 0
+        
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "author": self.author,
+            "last_updated": self.last_updated.isoformat(),
+            "is_public": self.is_public,
+            "rating": self.rating,
+            "student_count": self.get_student_count(),
+            "lesson_count": self.get_lesson_count()
+        }
 
 
 class Rating(models.Model):
