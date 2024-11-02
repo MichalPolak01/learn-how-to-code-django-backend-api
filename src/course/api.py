@@ -4,18 +4,17 @@ from .models import Course, Rating
 from .schemas import CourseCreateSchema, CourseDetailSchema
 from learn_how_to_code.schemas import MessageSchema
 import helpers
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = Router()
 
 
 @router.post("", response={201: CourseDetailSchema, 400: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def create_course(request, payload: CourseCreateSchema):
-    """
-        Endpoint to create a new course.
-        
-        Allows authenticated users with a 'TEACHER' role to create a course.
-        The course name must be unique within the database.
-    """
+    """Endpoint to create a new course."""
+
     try:
         author = request.user
 
@@ -34,14 +33,28 @@ def create_course(request, payload: CourseCreateSchema):
     except Exception as e:
         return 500, {"message": "An unexpected error occurred during course creation."}
     
+    
+@router.get('', response={200: list[CourseDetailSchema], 500: MessageSchema}, auth=helpers.auth_required)
+def get_list_public_courses(request):
+    """Retrieves a list of all public courses."""
+
+    try:
+        courses = Course.objects.filter(is_public=True)
+
+        return 200, [CourseDetailSchema(**course.to_dict()) for course in courses]
+    except Exception as e:
+        return 500, {"message": "An unexpected error occurred while retrieving courses."}
+    
 
 @router.get('/{course_id}', response={200: CourseDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-def get_course(request, course_id:int):
+def get_public_course(request, course_id:int):
+    """Retrieves details of a specific public course by ID."""
+
     try:
-        course = Course.objects.get(id=course_id)
+        course = Course.objects.get(id=course_id, is_public=True)
         
         return 200, course.to_dict()
     except Course.DoesNotExist:
-        return 404, {"message": f"Course with id {course_id} doesn't exist."}
+        return 404, {"message": f"No public course found with id {course_id}."}
     except Exception as e:
         return 500, {"message": "An unexpected error occurred during course getting."}
