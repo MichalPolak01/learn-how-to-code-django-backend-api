@@ -22,9 +22,10 @@ class CourseCreateSchema(Schema):
     name: str
     description: str
 
+
 class CourseUpdateSchema(Schema):
-    name: Optional[str]
-    description: Optional[str]
+    name: Optional[str] = None
+    description: Optional[str] = None
 
 
 class RatingSchemaResponse(Schema):

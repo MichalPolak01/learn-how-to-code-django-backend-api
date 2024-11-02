@@ -84,3 +84,25 @@ def get_my_course(request, course_id: int):
         return 404, {"message": f"Course with id {course_id} not found for the current user."}
     except Exception as e:
         return 500, {"message": "An unexpected error occurred while retrieving the course."}
+    
+
+@router.patch('/{course_id}', response={200: CourseDetailSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def update_my_course(request, payload: CourseUpdateSchema, course_id: int):
+    """Updates details of a specific course created by the authenticated user."""
+
+    try:
+        course = Course.objects.get(id=course_id, author=request.user)
+
+        if payload.name and Course.objects.filter(name=payload.name).exclude(id=course_id).exists():
+            return 400, {"message": "This course name is already taken by another course."}
+        
+        for attr, value in payload.dict(exclude_unset=True).items():
+            setattr(course, attr, value)
+
+        course.save()
+
+        return 200, course.to_dict()
+    except Course.DoesNotExist:
+        return 404, {"message": f"Course with id {course_id} not found for the current user."}
+    except Exception as e:
+        return 500, {"message": "An unexpected error occurred while updating the course."}
