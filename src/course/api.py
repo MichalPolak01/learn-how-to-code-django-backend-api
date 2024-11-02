@@ -122,3 +122,22 @@ def delete_my_course(request, course_id: int):
         return 404, {"message": f"Course with id {course_id} not found for the current user."}
     except Exception as e:
         return 500, {"message": "An unexpected error occurred while deleting the course."}
+
+
+@router.post('/{course_id}/enroll', response={204: MessageSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def enroll_student(request, course_id: int):
+    """Enroll student to course."""
+
+    try:
+        course = Course.objects.get(id=course_id, is_public=True)
+
+        if request.user in course.students.all():
+            return 400, {"message": "Already enrolled in this course."}
+        
+        course.students.add(request.user)
+
+        return 204, {"message": "Student enrolled successfully."}
+    except Course.DoesNotExist:
+        return 404, {"message": f"No public course found with id {course_id}."}
+    except Exception as e:
+        return 500, {"message": "An unexpected error occurred while enrolling student to the course."}
