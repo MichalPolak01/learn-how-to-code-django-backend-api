@@ -106,3 +106,19 @@ def update_my_course(request, payload: CourseUpdateSchema, course_id: int):
         return 404, {"message": f"Course with id {course_id} not found for the current user."}
     except Exception as e:
         return 500, {"message": "An unexpected error occurred while updating the course."}
+
+
+@router.delete('/{course_id}', response={204: MessageSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def delete_my_course(request, course_id: int):
+    """Remove a specific course created by the authenticated user."""   
+
+    try:
+        course = Course.objects.get(id=course_id, author=request.user)
+
+        course.delete()
+
+        return 204, {"message": "Course deleted successfully."}
+    except Course.DoesNotExist:
+        return 404, {"message": f"Course with id {course_id} not found for the current user."}
+    except Exception as e:
+        return 500, {"message": "An unexpected error occurred while deleting the course."}
