@@ -1,7 +1,7 @@
 from ninja import Router
 
 from .models import Course, Rating
-from .schemas import CourseCreateSchema, CourseUpdateSchema, CourseDetailSchema
+from .schemas import CourseCreateSchema, CourseUpdateSchema, CourseDetailSchema, RatingSchema
 from learn_how_to_code.schemas import MessageSchema
 import helpers
 import logging
@@ -108,25 +108,24 @@ def update_my_course(request, payload: CourseUpdateSchema, course_id: int):
         return 500, {"message": "An unexpected error occurred while updating the course."}
 
 
-@router.delete('/{course_id}', response={204: MessageSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+@router.delete('/{course_id}', response={200: MessageSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def delete_my_course(request, course_id: int):
-    """Remove a specific course created by the authenticated user."""   
+    """Deletes a specific course created by the authenticated user."""   
 
     try:
         course = Course.objects.get(id=course_id, author=request.user)
-
         course.delete()
 
-        return 204, {"message": "Course deleted successfully."}
+        return 200, {"message": "Course deleted successfully."}
     except Course.DoesNotExist:
         return 404, {"message": f"Course with id {course_id} not found for the current user."}
     except Exception as e:
         return 500, {"message": "An unexpected error occurred while deleting the course."}
 
 
-@router.post('/{course_id}/enroll', response={204: MessageSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+@router.post('/{course_id}/enroll', response={200: MessageSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def enroll_student(request, course_id: int):
-    """Enroll student to course."""
+    """Enrolls the authenticated user (student) in a public course."""
 
     try:
         course = Course.objects.get(id=course_id, is_public=True)
@@ -136,8 +135,30 @@ def enroll_student(request, course_id: int):
         
         course.students.add(request.user)
 
-        return 204, {"message": "Student enrolled successfully."}
+        return 200, {"message": "Successfully enrolled in the course."}
     except Course.DoesNotExist:
         return 404, {"message": f"No public course found with id {course_id}."}
     except Exception as e:
-        return 500, {"message": "An unexpected error occurred while enrolling student to the course."}
+        return 500, {"message": "An unexpected error occurred during enrollment in the course."}
+    
+
+@router.post('/{course_id}/rate', response={200: MessageSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def rate_course(request, course_id: int, payload: RatingSchema):
+    """Allows an enrolled user to rate a public course."""
+
+    try:
+        course = Course.objects.get(id=course_id, is_public=True)
+
+        if not course.students.filter(id=request.user.id).exists():
+            return 400, {"message": "Only enrolled users can rate this course."}
+        
+        Rating.objects.update_or_create(
+            course=course, user=request.user,
+            defaults={'score': payload.score}
+        )
+
+        return 200, {"message": "Course rated successfully."}
+    except Course.DoesNotExist:
+        return 404, {"message": f"No public course found with id {course_id}."}
+    except Exception as e:
+        return 500, {"message": "An unexpected error occurred during the course rating process."}

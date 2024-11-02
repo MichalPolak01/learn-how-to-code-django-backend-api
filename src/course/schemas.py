@@ -26,7 +26,8 @@ class CourseCreateSchema(Schema):
 class CourseUpdateSchema(Schema):
     name: Optional[str] = None
     description: Optional[str] = None
+    is_public: Optional[bool] = None
 
 
-class RatingSchemaResponse(Schema):
+class RatingSchema(Schema):
     score: int

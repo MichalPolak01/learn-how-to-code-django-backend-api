@@ -39,7 +39,7 @@ class Course(models.Model):
             "author": self.author,
             "last_updated": self.last_updated.isoformat(),
             "is_public": self.is_public,
-            "rating": self.rating,
+            "rating": self.get_average_score,
             "student_count": self.get_student_count(),
             "lesson_count": self.get_lesson_count()
         }
