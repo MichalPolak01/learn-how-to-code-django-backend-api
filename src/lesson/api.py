@@ -49,7 +49,7 @@ def get_list_lessons_for_module(request, module_id: int):
     
 
 @router.get("lessons/{lesson_id}", response={200: LessonDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-def get_list_modules_for_course(request, lesson_id: int):
+def get_lesson(request, lesson_id: int):
     """Retrieves details of a specific lesson."""
 
     try:
@@ -60,3 +60,22 @@ def get_list_modules_for_course(request, lesson_id: int):
         return 404, {"message": f"Lesson with id {lesson_id} not found."}
     except Exception as e:
         return 500, {"message": "An unexpected error occurred while retrieving the lesson."}
+    
+
+@router.patch("lessons/{lesson_id}", response={200: LessonDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def update_lesson(request, payload: LessonUpdateSchema, lesson_id: int):
+    """Update details of a specific lesson."""
+
+    try:
+        lesson = Lesson.objects.get(id=lesson_id)
+
+        for attr, value in payload.dict(exclude_unset=True).items():
+            setattr(lesson, attr, value)
+
+        lesson.save()
+
+        return 200, lesson.to_dict()
+    except Lesson.DoesNotExist:
+        return 404, {"message": f"Lesson with id {lesson_id} not found."}
+    except Exception as e:
+        return 500, {"message": "An unexpected error occurred while updating the lesson."}
