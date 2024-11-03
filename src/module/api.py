@@ -27,7 +27,7 @@ def create_course(request, payload: ModuleCreateSchema, course_id: int):
     except Course.DoesNotExist:
         return 404, {"message": f"Course with id {course_id} not found for the current user."}
     except Exception as e:
-        return 500, {"message": "An unexpected error occurred during course creation."}
+        return 500, {"message": "An unexpected error occurred during module creation."}
     
 
 @router.get('/{course_id}/modules', response={200: list[ModuleDetailSchema], 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
@@ -42,7 +42,7 @@ def get_list_modules_for_course(request, course_id: int):
     except Course.DoesNotExist:
         return 404, {"message": f"Course with id {course_id} not found for the current user."}
     except Exception as e:
-        return 500, {"message": "An unexpected error occurred during course creation."}
+        return 500, {"message": "An unexpected error occurred while retrieving list of modules."}
     
 
 @router.get('/{course_id}/modules/{module_id}', response={200: ModuleDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
@@ -53,15 +53,15 @@ def get_module(request, course_id: int, module_id: int):
         module = Module.objects.get(id=module_id, course=course_id)
 
         return 200, module.to_dict()
-    except Course.DoesNotExist:
-        return 404, {"message": f"Course with id {course_id} not found for the current user."}
+    except Module.DoesNotExist:
+        return 404, {"message": f"Module with id {module_id} not found."}
     except Exception as e:
-        return 500, {"message": "An unexpected error occurred during course creation."}
+        return 500, {"message": "An unexpected error occurred while retrieving the module."}
     
 
 @router.patch('/{course_id}/modules/{module_id}', response={200: ModuleDetailSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def update_module(request, payload: ModuleUpdateSchema, course_id: int, module_id: int):
-    """Updates details of a specific course created by the authenticated user."""
+    """Updates details of a specific module."""
 
     try:
         module = Module.objects.get(id=module_id, course=course_id)
@@ -72,7 +72,22 @@ def update_module(request, payload: ModuleUpdateSchema, course_id: int, module_i
         module.save()
 
         return 200, module.to_dict()
-    except Course.DoesNotExist:
-        return 404, {"message": f"Course with id {course_id} not found for the current user."}
+    except Module.DoesNotExist:
+        return 404, {"message": f"Module with id {module_id} not found."}
     except Exception as e:
-        return 500, {"message": "An unexpected error occurred while updating the course."}
+        return 500, {"message": "An unexpected error occurred while updating the module."}
+    
+
+@router.delete('/{course_id}/modules/{module_id}', response={200: MessageSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def delete_module(request, course_id: int, module_id: int):
+    """Deletes a specific module from a course."""   
+
+    try:
+        module = Module.objects.get(id=module_id, course=course_id)
+        module.delete()
+
+        return 200, {"message": "Module deleted successfully."}
+    except Module.DoesNotExist:
+        return 404, {"message": f"Module with id {module_id} not found."}
+    except Exception as e:
+        return 500, {"message": "An unexpected error occurred while deleting the module."}
