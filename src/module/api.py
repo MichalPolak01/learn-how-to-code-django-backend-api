@@ -43,3 +43,17 @@ def get_list_modules_for_course(request, course_id: int):
         return 404, {"message": f"Course with id {course_id} not found for the current user."}
     except Exception as e:
         return 500, {"message": "An unexpected error occurred during course creation."}
+    
+
+@router.get('/{course_id}/modules/{module_id}', response={200: ModuleDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def get_list_modules_for_course(request, course_id: int, module_id: int):
+    """Retrieves all modules for a specific course."""
+
+    try:
+        module = Module.objects.get(id=module_id, course=course_id)
+
+        return 200, module.to_dict()
+    except Course.DoesNotExist:
+        return 404, {"message": f"Course with id {course_id} not found for the current user."}
+    except Exception as e:
+        return 500, {"message": "An unexpected error occurred during course creation."}
