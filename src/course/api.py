@@ -1,12 +1,15 @@
 from ninja import Router
 
 from .models import Course, Rating
+from module.models import Module
 from .schemas import CourseCreateSchema, CourseUpdateSchema, CourseDetailSchema, RatingSchema
 from learn_how_to_code.schemas import MessageSchema
 import helpers
-import logging
+import json
 
-logger = logging.getLogger(__name__)
+from openai import OpenAI
+from decouple import config
+
 
 router = Router()
 
@@ -25,9 +28,24 @@ def create_course(request, payload: CourseCreateSchema):
             return 400, {"message": "Only teachers can create courses."}
         
         course_data = payload.dict()
+        course_data.pop("generate_modules", None)
         course_data['author'] = request.user
 
         course = Course.objects.create(**course_data)
+
+        if payload.generate_modules:
+            try:
+                modules_data = generate_modules(course.name, course.description)
+
+                for index, module_data in enumerate(modules_data):
+                    Module.objects.create(
+                        course=course,
+                        name=module_data["name"],
+                        order=index,
+                        is_visible=True
+                    )
+            except Exception as e:
+                return 500, {"message": "An error occurred during module generation."}
 
         return 201, course.to_dict()
     except Exception as e:
@@ -162,3 +180,28 @@ def rate_course(request, course_id: int, payload: RatingSchema):
         return 404, {"message": f"No public course found with id {course_id}."}
     except Exception as e:
         return 500, {"message": "An unexpected error occurred during the course rating process."}
+    
+
+
+def generate_modules(course_name: str, course_description: str, language: str = "polish") -> list[dict]:
+    client = OpenAI(api_key=config('OPENAI_API_KEY', cast=str))
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": f"You are a module generator. Always respond in JSON format as a list of objects with 'name' field in {language}."},
+                {"role": "user", "content": f"Generate a list of 3 modules for a course titled '{course_name}' with the following description: {course_description}. Each module should be an object with a 'name' field."}
+            ]
+        )
+
+        result = response.choices[0].message.content
+
+        try:
+            parsed_result = json.loads(result)
+            return parsed_result
+        except json.JSONDecodeError as e:
+            return [{"error": "Model did not return valid JSON format", "response": result}]
+    
+    except Exception as e:
+        raise

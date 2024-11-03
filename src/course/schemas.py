@@ -1,7 +1,9 @@
 from ninja import Schema
 from pydantic import EmailStr, Field, field_validator
-from typing import Optional
+from typing import Optional, List
 import re
+
+from module.schemas import ModuleDetailSchema
 
 from authentication.schemas import UserDetailSchema
 
@@ -16,11 +18,13 @@ class CourseDetailSchema(Schema):
     rating: float
     student_count: int
     lesson_count: int
+    modules: List[ModuleDetailSchema]
 
 
 class CourseCreateSchema(Schema):
     name: str
-    description: str
+    description: Optional[str] = ""
+    generate_modules: Optional[bool] = False
 
 
 class CourseUpdateSchema(Schema):

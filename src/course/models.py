@@ -31,6 +31,18 @@ class Course(models.Model):
         except:
             return 0
         
+    def get_modules(self):
+        return [
+            {
+                "id": module.id,
+                "name": module.name,
+                "order": module.order,
+                "is_visible": module.is_visible,
+                "lesson_count": module.get_lesson_count(),
+            }
+            for module in self.modules.all().order_by("order")
+        ]
+        
     def to_dict(self):
         return {
             "id": self.id,
@@ -41,7 +53,8 @@ class Course(models.Model):
             "is_public": self.is_public,
             "rating": self.get_average_score,
             "student_count": self.get_student_count(),
-            "lesson_count": self.get_lesson_count()
+            "lesson_count": self.get_lesson_count(),
+            "modules": self.get_modules()
         }
 
 
