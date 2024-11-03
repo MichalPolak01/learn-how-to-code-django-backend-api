@@ -39,6 +39,7 @@ class Course(models.Model):
                 "order": module.order,
                 "is_visible": module.is_visible,
                 "lesson_count": module.get_lesson_count(),
+                "lessons": module.lessons
             }
             for module in self.modules.all().order_by("order")
         ]

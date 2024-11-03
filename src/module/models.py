@@ -18,9 +18,19 @@ class Module(models.Model):
     
     def get_lesson_count(self):
         try:
-            return self.lesson.count()
+            return self.lessons.count()
         except:
             return 0
+        
+    def get_lessons(self):
+        return [
+            {
+                "id": lesson.id,
+                "name": lesson.name,
+                "order": lesson.order,
+            }
+            for lesson in self.lessons.all().order_by("order")
+        ]
         
     def to_dict(self):
         return {
@@ -28,5 +38,6 @@ class Module(models.Model):
             "name": self.name,
             "order": self.order,
             "is_visible": self.is_visible,
-            "lesson_count": self.get_lesson_count()
+            "lesson_count": self.get_lesson_count(),
+            "lessons": self.get_lessons()
         }

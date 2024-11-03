@@ -1,7 +1,9 @@
 from ninja import Schema
 from pydantic import EmailStr, Field, field_validator
-from typing import Optional
+from typing import Optional, List
 import re
+
+from lesson.schemas import LessonDetailSchema
 
 class ModuleCreateSchema(Schema):
     name: str
@@ -20,3 +22,4 @@ class ModuleDetailSchema(Schema):
     order: int
     is_visible: bool
     lesson_count: int
+    lessons: List[LessonDetailSchema]
