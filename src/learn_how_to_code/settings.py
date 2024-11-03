@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "course",
     "module",
     "lesson",
+    "lesson_content"
 ]
 
 MIDDLEWARE = [
