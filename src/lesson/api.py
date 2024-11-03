@@ -141,7 +141,6 @@ def generate_lessons_for_module(module_name: str, language: str = "polish") -> l
         )
 
         result = response.choices[0].message.content
-        logger.info(f"OpenAI response for lesson generation: {result}")
 
         try:
             parsed_result = json.loads(result)
