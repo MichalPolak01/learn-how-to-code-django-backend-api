@@ -31,3 +31,18 @@ def create_lesson(request, payload: LessonCreateSchema, module_id: int):
         return 404, {"message": f"Module with id {module_id} not found."}
     except Exception as e:
         return 500, {"message": "An unexpected error occurred during lesson creation."}
+    
+
+@router.get("/{module_id}/lessons", response={200: list[LessonDetailSchema], 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def get_list_modules_for_course(request, module_id: int):
+    """Retrieves all lessons for a specific module."""
+
+    try:
+        module = Module.objects.get(id=module_id)
+        lessons = module.lessons.all()
+
+        return 200, [LessonDetailSchema(**lesson.to_dict()) for lesson in lessons]
+    except Module.DoesNotExist:
+        return 404, {"message": f"Module with id {module_id} not found."}
+    except Exception as e:
+        return 500, {"message": "An unexpected error occurred while retrieving list of lessons."}
