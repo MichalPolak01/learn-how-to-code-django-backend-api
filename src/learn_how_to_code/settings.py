@@ -47,7 +47,8 @@ INSTALLED_APPS = [
     
     # Apps
     "authentication",
-    "course"
+    "course",
+    "module",
 ]
 
 MIDDLEWARE = [
