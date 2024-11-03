@@ -79,3 +79,18 @@ def update_lesson(request, payload: LessonUpdateSchema, lesson_id: int):
         return 404, {"message": f"Lesson with id {lesson_id} not found."}
     except Exception as e:
         return 500, {"message": "An unexpected error occurred while updating the lesson."}
+    
+
+@router.delete("lessons/{lesson_id}", response={200: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def delete_lesson(request, lesson_id: int):
+    """Deletes a specific lesson from a module."""   
+
+    try:
+        lesson = Lesson.objects.get(id=lesson_id)
+        lesson.delete()
+
+        return 200, {"message": "Lesson deleted successfully."}
+    except Lesson.DoesNotExist:
+        return 404, {"message": f"Lesson with id {lesson_id} not found."}
+    except Exception as e:
+        return 500, {"message": "An unexpected error occurred while deleting the lesson."}
