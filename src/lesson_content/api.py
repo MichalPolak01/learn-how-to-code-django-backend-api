@@ -205,3 +205,86 @@ def generate_quiz(lesson_name: str, language: str = "polish") -> dict:
             return [{"error": "Model did not return valid JSON format", "response": result}]
     except Exception as e:
         raise
+
+
+
+@router.post('/lessons/{lesson_id}/assignment/generate', response={201: LessonAssignmentSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def generate_lesson_assignment(request, lesson_id: int):
+    """Generates an assignment for a specific lesson."""
+
+    try:
+        lesson = Lesson.objects.get(id=lesson_id)
+
+        assignment_data = generate_assignment(lesson.name)
+
+        lesson_assignment= LessonAssigment.objects.create(
+            lesson=lesson,
+            instructions=assignment_data['instruction']
+        )
+        
+        return 201, lesson_assignment
+    except Lesson.DoesNotExist:
+        return 404, {"message": f"Lesson with id {lesson_id} not found."}
+    except Exception as e:
+        traceback.print_exc()
+        return 500, {"message": "An error occurred while generating the assignment."}
+    
+
+@router.post('/lessons/{lesson_id}/assignment', response={201: LessonAssignmentSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def generate_lesson_assignment(request, payload: LessonAssignmentSchema, lesson_id: int):
+    """Allows a teacher to manually create a assignment for a lesson."""
+
+    try:
+        lesson = Lesson.objects.get(id=lesson_id)
+
+        lesson_assignment= LessonAssigment.objects.create(
+            lesson=lesson,
+            instructions=payload.instructions
+        )
+        
+        return 201, lesson_assignment
+    except Lesson.DoesNotExist:
+        return 404, {"message": f"Lesson with id {lesson_id} not found."}
+    except Exception as e:
+        traceback.print_exc()
+        return 500, {"message": "An error occurred while creating the assignment."}
+    
+
+def generate_assignment(lesson_name: str, language: str = "polish"):
+    try:
+        client = OpenAI(api_key=config('OPENAI_API_KEY', cast=str))
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        f"You are an educational content creator skilled in creating structured assignments for students. "
+                        f"Respond only in JSON format with a single key 'instruction', containing the assignment instructions as plain HTML content. "
+                        f"Ensure that all instructions are clear, detailed, and well-formatted. Respond only with the JSON object, without any extra formatting or explanations. Use {language} for the response."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Create a detailed assignment instruction for a lesson on '{lesson_name}'. "
+                        "The instruction should:\n"
+                        "- Begin with a brief introduction to the assignment in <p> tags.\n"
+                        "- Include a main heading for the assignment using <h1> tags.\n"
+                        "- Provide a step-by-step guide, with each step wrapped in <li> tags inside an <ol> tag.\n"
+                        "- If relevant, include example code snippets within <pre><code> tags to guide the student.\n"
+                        "- Conclude with tips or advice in <em> tags, if necessary.\n\n"
+                        "Ensure that all HTML tags are semantically appropriate and the entire response is contained in the 'instruction' key."
+                    )
+                }
+            ]
+        )
+        result = response.choices[0].message.content
+
+        try:
+            parsed_result = json.loads(result)
+            return parsed_result
+        except json.JSONDecodeError as e:
+            return [{"error": "Model did not return valid JSON format", "response": result}]
+    except Exception as e:
+        raise

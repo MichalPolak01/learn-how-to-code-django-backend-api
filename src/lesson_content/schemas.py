@@ -14,7 +14,7 @@ class LessonQuizSchema(Schema):
     options: List[QuizOptionSchema]
 
 class LessonAssignmentSchema(Schema):
-    instruction: str
+    instructions: str
 
 class UserProgressSchema(Schema):
     lesson_id: int
