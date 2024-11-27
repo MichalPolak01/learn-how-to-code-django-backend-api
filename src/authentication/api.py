@@ -45,7 +45,8 @@ def login(request, payload: LoginSchema):
     return {
         "refresh": str(refresh),
         "access": str(refresh.access_token),
-        "username": user.username
+        "username": user.username,
+        "role": user.role
     }
 
 

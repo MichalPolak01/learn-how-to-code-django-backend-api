@@ -11,6 +11,7 @@ class Course(models.Model):
     is_public = models.BooleanField(default=False)
     rating = models.FloatField(default=0.0)
     students = models.ManyToManyField(User, related_name='enrolled_courses', blank=True)
+    creator_state = models.CharField(max_length=60, default='update')
 
     def __str__(self):
         return self.name
@@ -31,17 +32,22 @@ class Course(models.Model):
         except:
             return 0
         
+    # def get_modules(self):
+    #     return [
+    #         {
+    #             "id": module.id,
+    #             "name": module.name,
+    #             "order": module.order,
+    #             "is_visible": module.is_visible,
+    #             "lesson_count": module.get_lesson_count(),
+    #             "lessons": module.lessons
+    #         }
+    #         for module in self.modules.all().order_by("order")
+    #     ]
+    
     def get_modules(self):
-        return [
-            {
-                "id": module.id,
-                "name": module.name,
-                "order": module.order,
-                "is_visible": module.is_visible,
-                "lesson_count": module.get_lesson_count(),
-            }
-            for module in self.modules.all().order_by("order")
-        ]
+        """Retrieve all lessons with their details."""
+        return [module.to_dict() for module in self.modules.all().order_by("order")]
         
     def to_dict(self):
         return {
@@ -54,7 +60,8 @@ class Course(models.Model):
             "rating": self.get_average_score,
             "student_count": self.get_student_count(),
             "lesson_count": self.get_lesson_count(),
-            "modules": self.get_modules()
+            "modules": self.get_modules(),
+            "creator_state": self.creator_state
         }
 
 

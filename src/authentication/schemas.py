@@ -37,7 +37,7 @@ class MessageSchema(Schema):
 
 class UserUpdateSchema(Schema):
     username: Optional[str] = None
-    email: Optional[str] = None
+    email: Optional[EmailStr] = None
     role: Optional[str] = None
 
     @field_validator("role")
