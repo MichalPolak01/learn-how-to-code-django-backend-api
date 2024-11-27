@@ -1,19 +1,27 @@
 from ninja import Schema
-from typing import List
+from typing import List, Optional
 
 
-class LessonDescriptionSchema(Schema):
+class LessonIntroductionSchema(Schema):
+    id: Optional[int] = None
     description: str
 
 class QuizOptionSchema(Schema):
-    option: str
+    id: Optional[int] = None
+    answer: str
     is_correct: bool
 
 class LessonQuizSchema(Schema):
     question: str
-    options: List[QuizOptionSchema]
+    answers: List[QuizOptionSchema]
+
+class LessonQuizDetailSchema(Schema):
+    id: Optional[int] = None
+    question: str
+    answers: List[QuizOptionSchema]
 
 class LessonAssignmentSchema(Schema):
+    id: Optional[int] = None
     instructions: str
 
 class UserProgressSchema(Schema):

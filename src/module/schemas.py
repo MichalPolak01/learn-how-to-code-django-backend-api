@@ -7,6 +7,7 @@ from lesson.schemas import LessonDetailSchema
 
 class ModuleCreateSchema(Schema):
     name: str
+    order: int
     is_visible: Optional[bool] = True
 
 

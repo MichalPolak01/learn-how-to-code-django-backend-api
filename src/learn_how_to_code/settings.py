@@ -150,6 +150,12 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 NINJA_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=7),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=14),
+}
+
+NINJA_SETTINGS = {
+    "EXCEPTION_HANDLERS": {
+        "ValidationError": "learn_how_to_code.exception_handlers.validation_error_handler",
+    }
 }

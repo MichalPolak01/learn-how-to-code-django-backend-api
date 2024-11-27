@@ -1,13 +1,13 @@
+from django.db import IntegrityError
 from ninja_extra import Router
 
 from openai import OpenAI
 from decouple import config
 
-from .schemas import LessonDescriptionSchema, LessonQuizSchema, LessonAssignmentSchema
-from module.schemas import ModuleDetailSchema
+from .schemas import LessonIntroductionSchema, LessonQuizSchema, LessonAssignmentSchema, LessonQuizDetailSchema
 from learn_how_to_code.schemas import MessageSchema
 
-from .models import LessonDescription, LessonQuiz, QuizOption, LessonAssigment
+from .models import LessonIntroduction, LessonQuiz, QuizOption, LessonAssignment
 from lesson.models import Lesson
 
 import helpers
@@ -19,47 +19,154 @@ logger = logging.getLogger(__name__)
 
 router = Router()
 
-@router.post('/lessons/{lesson_id}/description/generate', response={201: LessonDescriptionSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-def generate_lesson_description(request, lesson_id: int):
-    """Generates a description for a specific lesson."""
+
+@router.post(
+        '/{lesson_id}/introduction', 
+        response={201: LessonIntroductionSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema},
+        auth=helpers.auth_required
+)
+def lesson_introduction(request, lesson_id: int, generate: bool = False, payload: LessonIntroductionSchema = None):
+    """Create an introduction for lesson or if param `generate=true` generate the introduction."""
+    try:
+        lesson = Lesson.objects.get(id=lesson_id)
+
+        if generate:
+            introduction_data = generate_introduction(lesson.topic)
+
+            lesson_introduction = LessonIntroduction.objects.create(
+                lesson=lesson,
+                description=introduction_data['description']
+            )
+            return 201, lesson_introduction
+
+        else:
+            if payload is None:
+                return 400, {"message": "Payload is required when not generating the introduction."}
+
+            lesson_introduction = LessonIntroduction.objects.create(
+                lesson=lesson,
+                description=payload.description
+            )
+            return 201, lesson_introduction
+
+    except Lesson.DoesNotExist:
+        return 404, {"message": f"Lesson with id {lesson_id} not found."}
+    except IntegrityError as e:
+        if "unique constraint" in str(e).lower():
+            return 400, {"message": "A introduction for this lesson already exists. You cannot create another one."}
+        else:
+            return 400, {"message": "A database integrity error occurred."}
+    except Exception as e:
+        traceback.print_exc()
+        return 500, {"message": "An error occurred while handling the introduction."}
+
+        
+@router.post(
+    '/{lesson_id}/quiz',
+    response={201: LessonQuizDetailSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema},
+    auth=helpers.auth_required
+)
+def lesson_quiz(request, lesson_id: int, generate: bool = False, payload: LessonQuizSchema = None):
+    """Create a quiz for lesson or if `generate=true` generate the quiz."""
 
     try:
         lesson = Lesson.objects.get(id=lesson_id)
 
-        description_data = generate_description(lesson.name)
+        if generate:
+            quiz_data = generate_quiz(lesson.topic)
 
-        lesson_description = LessonDescription.objects.create(
-            lesson=lesson,
-            description=description_data['description']
-        )
-        
-        return 201, lesson_description
+            for question_data in quiz_data["questions"]:
+                quiz = LessonQuiz.objects.create(
+                    lesson=lesson,
+                    question=question_data["question"]
+                )
+                options = []
+
+                for option_data in question_data["options"]:
+                    option = QuizOption.objects.create(
+                        question=quiz,
+                        answer=option_data["option"],
+                        is_correct=option_data["is_correct"]
+                    )
+                    options.append({
+                        "id": option.id,
+                        "answer": option.answer,
+                        "is_correct": option.is_correct
+                    })
+
+        else:
+            if payload is None:
+                return 400, {"message": "Payload is required when not generating the quiz."}
+
+            quiz = LessonQuiz.objects.create(
+                lesson=lesson,
+                question=payload.question
+            )
+
+            options = []
+            for option_data in payload.answers:
+                option = QuizOption.objects.create(
+                    question=quiz,
+                    answer=option_data.answer,
+                    is_correct=option_data.is_correct
+                )
+                options.append({
+                    "id": option.id,
+                    "answer": option.answer,
+                    "is_correct": option.is_correct
+                })
+
+        return 201, {
+            "id": quiz.id,
+            "question": quiz.question,
+            "answers": options
+        }
+
     except Lesson.DoesNotExist:
         return 404, {"message": f"Lesson with id {lesson_id} not found."}
     except Exception as e:
-        return 500, {"message": "An error occurred while generating the description."}
-    
+        traceback.print_exc()
+        return 500, {"message": "An error occurred while handling the quiz."}
+   
 
-@router.post('/lessons/{lesson_id}/description', response={201: LessonDescriptionSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-def generate_lesson_description(request, payload: LessonDescriptionSchema, lesson_id: int):
-    """Allows a teacher to manually create a description for a lesson."""
+@router.post('/{lesson_id}/assignment', response={201: LessonAssignmentSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def lesson_assignment(request, lesson_id: int, generate: bool = False, payload: LessonAssignmentSchema = None):
+    """Create an assignment for lesson or if `generate=true` generate the assignment."""
 
     try:
         lesson = Lesson.objects.get(id=lesson_id)
 
-        lesson_description = LessonDescription.objects.create(
-            lesson=lesson,
-            description=payload.description
-        )
+        if generate:
+            lesson = Lesson.objects.get(id=lesson_id)
+
+            assignment_data = generate_assignment(lesson.topic)
+
+            lesson_assignment= LessonAssignment.objects.create(
+                lesson=lesson,
+                instructions=assignment_data['instruction']
+            )
+
+        else:
+            lesson_assignment= LessonAssignment.objects.create(
+                lesson=lesson,
+                instructions=payload.instructions
+            )
         
-        return 201, lesson_description
+        return 201, lesson_assignment
     except Lesson.DoesNotExist:
         return 404, {"message": f"Lesson with id {lesson_id} not found."}
+    except IntegrityError as e:
+        if "unique constraint" in str(e).lower():
+            return 400, {"message": "A assignment for this lesson already exists. You cannot create another one."}
+        else:
+            return 400, {"message": "A database integrity error occurred."}
     except Exception as e:
-        return 500, {"message": "An error occurred while creating the description."}
+        traceback.print_exc()
+        return 500, {"message": "An error occurred while creating the assignment."}
     
-
-def generate_description(lesson_name: str, language: str = "polish"):
+    
+# Functions to generate lesson content
+def generate_introduction(lesson_name: str, language: str = "polish"):
     try:
         client = OpenAI(api_key=config('OPENAI_API_KEY', cast=str))
         response = client.chat.completions.create(
@@ -94,69 +201,6 @@ def generate_description(lesson_name: str, language: str = "polish"):
     except Exception as e:
         raise
 
-
-@router.post('/lessons/{lesson_id}/quiz/generate', response={201: list[LessonQuizSchema], 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-def generate_lesson_quiz(request, lesson_id: int):
-    """Generates a quiz for a lesson."""
-
-    try:
-        lesson = Lesson.objects.get(id=lesson_id)
-        quiz_data = generate_quiz(lesson.name)
-
-        if not isinstance(quiz_data, dict) or "questions" not in quiz_data:
-            print("Debug: quiz_data ma nieprawidłowy format:", quiz_data)
-            return 500, {"message": "Generated quiz format is invalid"}
-        
-        questions = []
-        for question_data in quiz_data["questions"]:
-            quiz = LessonQuiz.objects.create(
-                lesson=lesson,
-                question=question_data['question']
-            )
-            for option_data in question_data['options']:
-                QuizOption.objects.create(
-                    quiz=quiz,
-                    option=option_data['option'],
-                    is_correct=option_data['is_correct']
-                )
-            questions.append({
-                "question": quiz.question,
-                "options": [{"option": opt.option, "is_correct": opt.is_correct} for opt in quiz.options.all()]
-            })
-
-        return 201, questions
-    except Lesson.DoesNotExist:
-        return 404, {"message": f"Lesson with id {lesson_id} not found."}
-    except Exception as e:
-        traceback.print_exc()
-        return 500, {"message": "An error occurred while generating the quiz."}
-    
-
-@router.post('/lessons/{lesson_id}/quiz', response={201: LessonQuizSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-def generate_lesson_quiz(request, payload: LessonQuizSchema, lesson_id: int):
-    """Allows a teacher to manually create a quiz for a lesson."""
-
-    try:
-        lesson = Lesson.objects.get(id=lesson_id)
-
-        quiz = LessonQuiz.objects.create(
-            lesson=lesson,
-            question=payload.question
-        )
-
-        for option_data in payload.options:
-            QuizOption.objects.create(
-                quiz=quiz,
-                option=option_data.option,
-                is_correct=option_data.is_correct
-            )
-        
-        return 201, {"question": quiz.question, "options": quiz.options.all()}
-    except Lesson.DoesNotExist:
-        return 404, {"message": f"Lesson with id {lesson_id} not found."}
-    except Exception as e:
-        return 500, {"message": "An error occurred while creating the quiz."}
-    
 
 def generate_quiz(lesson_name: str, language: str = "polish") -> dict:
     try:
@@ -206,49 +250,6 @@ def generate_quiz(lesson_name: str, language: str = "polish") -> dict:
     except Exception as e:
         raise
 
-
-
-@router.post('/lessons/{lesson_id}/assignment/generate', response={201: LessonAssignmentSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-def generate_lesson_assignment(request, lesson_id: int):
-    """Generates an assignment for a specific lesson."""
-
-    try:
-        lesson = Lesson.objects.get(id=lesson_id)
-
-        assignment_data = generate_assignment(lesson.name)
-
-        lesson_assignment= LessonAssigment.objects.create(
-            lesson=lesson,
-            instructions=assignment_data['instruction']
-        )
-        
-        return 201, lesson_assignment
-    except Lesson.DoesNotExist:
-        return 404, {"message": f"Lesson with id {lesson_id} not found."}
-    except Exception as e:
-        traceback.print_exc()
-        return 500, {"message": "An error occurred while generating the assignment."}
-    
-
-@router.post('/lessons/{lesson_id}/assignment', response={201: LessonAssignmentSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-def generate_lesson_assignment(request, payload: LessonAssignmentSchema, lesson_id: int):
-    """Allows a teacher to manually create a assignment for a lesson."""
-
-    try:
-        lesson = Lesson.objects.get(id=lesson_id)
-
-        lesson_assignment= LessonAssigment.objects.create(
-            lesson=lesson,
-            instructions=payload.instructions
-        )
-        
-        return 201, lesson_assignment
-    except Lesson.DoesNotExist:
-        return 404, {"message": f"Lesson with id {lesson_id} not found."}
-    except Exception as e:
-        traceback.print_exc()
-        return 500, {"message": "An error occurred while creating the assignment."}
-    
 
 def generate_assignment(lesson_name: str, language: str = "polish"):
     try:
