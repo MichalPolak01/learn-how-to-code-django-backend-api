@@ -6,18 +6,18 @@ import re
 from lesson_content.schemas import LessonAssignmentSchema, LessonIntroductionSchema, LessonQuizDetailSchema
 
 class LessonCreateSchema(Schema):
-    name: str
+    topic: str
 
 
 class LessonUpdateSchema(Schema):
-    name: Optional[str] = None
+    topic: Optional[str] = None
     order: Optional[int] = None
 
 
 class LessonDetailSchema(Schema):
     id: int
-    name: str
+    topic: str
     order: int
-    description: List[LessonIntroductionSchema]
-    quizzes: List[LessonQuizDetailSchema]
-    assignment: List[LessonAssignmentSchema]
+    introduction: Optional[LessonIntroductionSchema] = None
+    quiz: List[LessonQuizDetailSchema]
+    assignment: Optional[LessonAssignmentSchema] = None

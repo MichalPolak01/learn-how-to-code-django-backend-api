@@ -165,7 +165,7 @@ def lesson_assignment(request, lesson_id: int, generate: bool = False, payload: 
         return 500, {"message": "An error occurred while creating the assignment."}
     
     
-# Functions to generate lesson content
+    
 def generate_introduction(lesson_name: str, language: str = "polish"):
     try:
         client = OpenAI(api_key=config('OPENAI_API_KEY', cast=str))

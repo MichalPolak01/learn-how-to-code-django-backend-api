@@ -22,24 +22,6 @@ logger = logging.getLogger(__name__)
 
 router = Router()
 
-# @router.post("/modules/{module_id}/lessons", response={201: LessonDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-# def create_lesson(request, payload: LessonCreateSchema, module_id: int):
-#     """Creates a new lesson within a specific module."""
-
-#     try:
-#         module = Module.objects.get(id=module_id)
-
-#         lesson_data = payload.dict()
-#         lesson_data['module'] = module
-#         lesson_data['order'] = Lesson.get_next_order(module_id)
-#         lesson = Lesson.objects.create(**lesson_data)
-
-#         return 201, lesson.to_dict()
-#     except Module.DoesNotExist:
-#         return 404, {"message": f"Module with id {module_id} not found."}
-#     except Exception as e:
-#         return 500, {"message": "An unexpected error occurred during lesson creation."}
-    
 
 @router.get("/modules/{module_id}/lessons", response={200: list[LessonDetailSchema], 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def get_list_lessons_for_module(request, module_id: int):
@@ -53,6 +35,7 @@ def get_list_lessons_for_module(request, module_id: int):
     except Module.DoesNotExist:
         return 404, {"message": f"Module with id {module_id} not found."}
     except Exception as e:
+        traceback.print_exc()
         return 500, {"message": "An unexpected error occurred while retrieving list of lessons."}
     
 
@@ -105,56 +88,6 @@ def delete_lesson(request, lesson_id: int):
         return 500, {"message": "An unexpected error occurred while deleting the lesson."}
     
 
-@router.post("/modules/{module_id}/lessons/generate", response={201: ModuleDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-def generate_lessons(request, module_id: int):
-    """Creates a new lesson within a specific module."""
-
-    try:
-        module = Module.objects.get(id=module_id)
-
-        lessons_data = generate_lessons_for_module(module.name)
-
-        while not lessons_data[0]['name']:
-            lessons_data = generate_lessons_for_module(module.name)
-
-        for index, lesson_data in enumerate(lessons_data):
-            Lesson.objects.create(
-                module=module,
-                name=lesson_data["name"],
-                order=Lesson.get_next_order(module_id)
-            )
-
-        return 201, module.to_dict()
-    except Module.DoesNotExist:
-        return 404, {"message": f"Module with id {module_id} not found."}
-    except Exception as e:
-        traceback.print_exc()
-        return 500, {"message": "An unexpected error occurred during lesson creation."}
-    
-
-def generate_lessons_for_module(module_name: str, language: str = "polish") -> list[dict]:
-    client = OpenAI(api_key=config('OPENAI_API_KEY', cast=str))
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": f"You are a lesson generator. Always respond in JSON format as a list of objects with 'name' field in {language}."},
-                {"role": "user", "content": f"Generate a list of 3 unique lesson names for a module titled '{module_name}'."}
-            ]
-        )
-
-        result = response.choices[0].message.content
-
-        try:
-            parsed_result = json.loads(result)
-            return parsed_result
-        except json.JSONDecodeError as e:
-            return [{"error": "Model did not return valid JSON format", "response": result}]
-    except Exception as e:
-        raise
-
-
 @router.post("/modules/{module_id}/lessons", response={201: list[LessonDetailSchema], 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def add_lessons_with_content(
     request,
@@ -162,19 +95,14 @@ def add_lessons_with_content(
     module_id: int,
     generate: bool = Query(False)
 ):
-    """
-    Adds lessons to a specific module. Optionally generates content for each lesson if 'generate=true'.
-    """
+    """Adds lessons to a specific module. Optionally generates content for each lesson if param `generate=true`."""
     try:
-        # Pobranie modułu
         module = Module.objects.get(id=module_id)
 
-        # ???
         module.lessons.all().delete()
         created_lessons = []
 
         for lesson_data in payload:
-            # Tworzenie lekcji
             lesson_dict = lesson_data.dict()
             lesson_dict['module'] = module
             lesson_dict['order'] = Lesson.get_next_order(module_id)
@@ -182,7 +110,6 @@ def add_lessons_with_content(
             lesson = Lesson.objects.create(**lesson_dict)
 
             if generate:
-                # Generowanie pełnej zawartości lekcji
                 try:
                     generated_content = generate_full_lesson_content(
                         lesson_name=lesson.topic,
@@ -191,14 +118,12 @@ def add_lessons_with_content(
                         course_description=module.course.description,
                     )
 
-                    # Zapis opisu
                     if "description" in generated_content:
                         LessonIntroduction.objects.create(
                             lesson=lesson,
-                            introduction=generated_content["description"]
+                            description=generated_content["description"]
                         )
 
-                    # Zapis quizu
                     if "quiz" in generated_content:
                         for question_data in generated_content["quiz"]:
                             quiz = LessonQuiz.objects.create(
@@ -207,20 +132,18 @@ def add_lessons_with_content(
                             )
                             correct_answer = question_data["answer"]
                             for option_text in question_data["options"]:
-                                option = QuizOption.objects.create(
-                                    quiz=quiz,
+                                answer = QuizOption.objects.create(
+                                    question=quiz,
                                     answer=option_text,
                                     is_correct=(option_text == correct_answer)
                                 )
-                                print("Zapisana opcja:", option.to_dict())  # Debugowanie
 
-                    # Zapis zadania
                     if "assignment" in generated_content:
                         assignment = LessonAssignment.objects.create(
                             lesson=lesson,
                             instructions=generated_content["assignment"]
                         )
-                        print("Zapisane zadanie:", assignment.to_dict())  # Debugowanie
+
                 except Exception as e:
                     traceback.print_exc()
                     return 500, {"message": f"Error while generating lesson content: {str(e)}"}
@@ -243,13 +166,10 @@ def generate_full_lesson_content(
     course_description: str,
     language: str = "polish"
 ) -> dict:
-    """
-    Generates the full content for a lesson, including description, quiz, and assignment.
-    """
+    """Generates the full content for a lesson, including description, quiz, and assignment."""
     client = OpenAI(api_key=config('OPENAI_API_KEY', cast=str))
 
     try:
-        # Generowanie zawartości lekcji
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
@@ -276,18 +196,14 @@ def generate_full_lesson_content(
             temperature=0.7
         )
 
-        # Debugowanie odpowiedzi
         content = response.choices[0].message.content.strip()
         print("Raw OpenAI response content:", content)
 
-        # Sprawdzanie pustej odpowiedzi
         if not content:
             raise Exception("OpenAI returned an empty response.")
 
-        # Próba sparsowania JSON
         try:
             result = json.loads(content)
-            # Walidacja kluczy odpowiedzi
             if not all(key in result for key in ["description", "quiz", "assignment"]):
                 raise ValueError("Response is missing required keys: 'description', 'quiz', or 'assignment'")
             return result

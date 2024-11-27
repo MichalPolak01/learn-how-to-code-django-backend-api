@@ -26,7 +26,7 @@ class QuizOption(models.Model):
     def to_dict(self):
         return {
             "id": self.id,
-            "answer": self.option,
+            "answer": self.answer,
             "is_correct": self.is_correct,
         }
 
