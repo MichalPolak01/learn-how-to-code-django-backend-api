@@ -17,25 +17,6 @@ import helpers
 
 router = Router()
 
-# @router.post("/{course_id}/modules", response={201: ModuleDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-# def create_course(request, payload: ModuleCreateSchema, course_id: int):
-#     """Creates a new module within a specific course."""
-
-#     try:
-#         course = Course.objects.get(id=course_id, author=request.user)
-
-#         module_data = payload.dict()
-#         module_data['course'] = course
-#         module_data['order'] = Module.get_next_order(course_id)
-
-#         module = Module.objects.create(**module_data)
-
-#         return 201, module.to_dict()
-#     except Course.DoesNotExist:
-#         return 404, {"message": f"Course with id {course_id} not found for the current user."}
-#     except Exception as e:
-#         return 500, {"message": "An unexpected error occurred during module creation."}
-    
 
 @router.post("/{course_id}/modules", response={201: list[ModuleDetailSchema], 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def add_modules_with_lessons(
@@ -44,21 +25,16 @@ def add_modules_with_lessons(
     course_id: int, 
     generate: bool = Query(False)
 ):
-    """
-    Adds or replaces modules in a specific course. Optionally generates lessons for each module if 'generate=true'.
-    """
+    """Adds or replaces modules in a specific course. Optionally generates lessons for each module if `generate=true`."""
 
     try:
-        # Pobranie kursu
         course = Course.objects.get(id=course_id, author=request.user)
 
-        # Usunięcie istniejących modułów
         course.modules.all().delete()
 
         created_modules = []
 
         for module_data in payload:
-            # Tworzenie modułu z przesłanego `payload`
             module_dict = module_data.dict()
             module_dict["course"] = course
 
@@ -68,17 +44,16 @@ def add_modules_with_lessons(
             if generate:
                 try:
                     lessons_data = generate_lessons(course.name, course.description, module.name)
-                    print(f"Debug: lessons_data = {lessons_data}")  # Debugowanie
+
                     for index, lesson_data in enumerate(lessons_data):
                         Lesson.objects.create(
                             module=module,
-                            name=lesson_data["name"],
+                            topic=lesson_data["name"],
                             order=index + 1
                         )
                 except Exception as e:
                     traceback.print_exc()
                     return 500, {"message": f"An error occurred while generating lessons: {str(e)}"}
-
 
         return 201, [module.to_dict() for module in created_modules]
     except Course.DoesNotExist:
@@ -86,8 +61,6 @@ def add_modules_with_lessons(
     except Exception as e:
         traceback.print_exc()
         return 500, {"message": "An unexpected error occurred while adding or replacing modules."}
-
-
 
 
 @router.get('/{course_id}/modules', response={200: list[ModuleDetailSchema], 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
@@ -153,6 +126,7 @@ def delete_module(request, course_id: int, module_id: int):
         return 500, {"message": "An unexpected error occurred while deleting the module."}
     
 
+
 def generate_lessons(course_name: str, course_description: str, module_name: str, language: str = "polish") -> list[dict]:
     """
     Generates a list of lessons for a module based on the course and module information.
@@ -188,10 +162,8 @@ def generate_lessons(course_name: str, course_description: str, module_name: str
         result = response.choices[0].message.content.strip()
 
         try:
-            # Validate and parse JSON
             parsed_result = json.loads(result)
             
-            # Ensure the response is a list of dicts with "name"
             if isinstance(parsed_result, list) and all(isinstance(item, dict) and "name" in item for item in parsed_result):
                 return parsed_result
             else:

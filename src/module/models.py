@@ -22,25 +22,6 @@ class Module(models.Model):
         except:
             return 0
         
-    # def get_lessons(self):
-    #     return [
-    #         {
-    #             "id": lesson.id,
-    #             "name": lesson.name,
-    #             "order": lesson.order,
-    #             # "description": lesson.get_description(),
-    #             # "quiz": lesson.quiz,
-    #             # "assignment": lesson.assignment,
-    #         }
-    #         for lesson in self.lessons.all().order_by("order")
-    #     ]
-
-    # def get_lessons(self):
-    #     return [lesson.to_dict() for lesson in self.lessons.all().order_by("order")]
-
-    # def get_lessons(self):
-    #     return [lesson.to_dict() for lesson in self.lessons.all().order_by("order")]
-
     def get_lessons(self):
         """Retrieve all lessons with their details."""
         return [lesson.to_dict() for lesson in self.lessons.all().order_by("order")]

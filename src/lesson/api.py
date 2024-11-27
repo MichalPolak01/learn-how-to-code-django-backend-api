@@ -23,71 +23,6 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-@router.get("/modules/{module_id}/lessons", response={200: list[LessonDetailSchema], 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-def get_list_lessons_for_module(request, module_id: int):
-    """Retrieves all lessons for a specific module."""
-
-    try:
-        module = Module.objects.get(id=module_id)
-        lessons = module.lessons.all()
-
-        return 200, [LessonDetailSchema(**lesson.to_dict()) for lesson in lessons]
-    except Module.DoesNotExist:
-        return 404, {"message": f"Module with id {module_id} not found."}
-    except Exception as e:
-        traceback.print_exc()
-        return 500, {"message": "An unexpected error occurred while retrieving list of lessons."}
-    
-
-@router.get("lessons/{lesson_id}", response={200: LessonDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-def get_lesson(request, lesson_id: int):
-    """Retrieves details of a specific lesson."""
-
-    try:
-        lesson = Lesson.objects.get(id=lesson_id)
-
-        return 200, lesson.to_dict()
-    except Lesson.DoesNotExist:
-        return 404, {"message": f"Lesson with id {lesson_id} not found."}
-    except Exception as e:
-        traceback.print_exc()
-        return 500, {"message": "An unexpected error occurred while retrieving the lesson."}
-    
-
-@router.patch("lessons/{lesson_id}", response={200: LessonDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-def update_lesson(request, payload: LessonUpdateSchema, lesson_id: int):
-    """Update details of a specific lesson."""
-
-    try:
-        lesson = Lesson.objects.get(id=lesson_id)
-
-        for attr, value in payload.dict(exclude_unset=True).items():
-            setattr(lesson, attr, value)
-
-        lesson.save()
-
-        return 200, lesson.to_dict()
-    except Lesson.DoesNotExist:
-        return 404, {"message": f"Lesson with id {lesson_id} not found."}
-    except Exception as e:
-        return 500, {"message": "An unexpected error occurred while updating the lesson."}
-    
-
-@router.delete("lessons/{lesson_id}", response={200: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-def delete_lesson(request, lesson_id: int):
-    """Deletes a specific lesson from a module."""   
-
-    try:
-        lesson = Lesson.objects.get(id=lesson_id)
-        lesson.delete()
-
-        return 200, {"message": "Lesson deleted successfully."}
-    except Lesson.DoesNotExist:
-        return 404, {"message": f"Lesson with id {lesson_id} not found."}
-    except Exception as e:
-        return 500, {"message": "An unexpected error occurred while deleting the lesson."}
-    
-
 @router.post("/modules/{module_id}/lessons", response={201: list[LessonDetailSchema], 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def add_lessons_with_content(
     request,
@@ -156,6 +91,71 @@ def add_lessons_with_content(
     except Exception as e:
         traceback.print_exc()
         return 500, {"message": "An unexpected error occurred while adding lessons."}
+
+
+@router.get("/modules/{module_id}/lessons", response={200: list[LessonDetailSchema], 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def get_list_lessons_for_module(request, module_id: int):
+    """Retrieves all lessons for a specific module."""
+
+    try:
+        module = Module.objects.get(id=module_id)
+        lessons = module.lessons.all()
+
+        return 200, [LessonDetailSchema(**lesson.to_dict()) for lesson in lessons]
+    except Module.DoesNotExist:
+        return 404, {"message": f"Module with id {module_id} not found."}
+    except Exception as e:
+        traceback.print_exc()
+        return 500, {"message": "An unexpected error occurred while retrieving list of lessons."}
+    
+
+@router.get("lessons/{lesson_id}", response={200: LessonDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def get_lesson(request, lesson_id: int):
+    """Retrieves details of a specific lesson."""
+
+    try:
+        lesson = Lesson.objects.get(id=lesson_id)
+
+        return 200, lesson.to_dict()
+    except Lesson.DoesNotExist:
+        return 404, {"message": f"Lesson with id {lesson_id} not found."}
+    except Exception as e:
+        traceback.print_exc()
+        return 500, {"message": "An unexpected error occurred while retrieving the lesson."}
+    
+
+@router.patch("lessons/{lesson_id}", response={200: LessonDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def update_lesson(request, payload: LessonUpdateSchema, lesson_id: int):
+    """Update details of a specific lesson."""
+
+    try:
+        lesson = Lesson.objects.get(id=lesson_id)
+
+        for attr, value in payload.dict(exclude_unset=True).items():
+            setattr(lesson, attr, value)
+
+        lesson.save()
+
+        return 200, lesson.to_dict()
+    except Lesson.DoesNotExist:
+        return 404, {"message": f"Lesson with id {lesson_id} not found."}
+    except Exception as e:
+        return 500, {"message": "An unexpected error occurred while updating the lesson."}
+    
+
+@router.delete("lessons/{lesson_id}", response={200: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def delete_lesson(request, lesson_id: int):
+    """Deletes a specific lesson from a module."""   
+
+    try:
+        lesson = Lesson.objects.get(id=lesson_id)
+        lesson.delete()
+
+        return 200, {"message": "Lesson deleted successfully."}
+    except Lesson.DoesNotExist:
+        return 404, {"message": f"Lesson with id {lesson_id} not found."}
+    except Exception as e:
+        return 500, {"message": "An unexpected error occurred while deleting the lesson."}
 
 
 
