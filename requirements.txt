@@ -4,3 +4,6 @@ django-ninja
 django-ninja-jwt[crypto]
 pydantic[email]
 pytest
+
+openai
+python-decouple
