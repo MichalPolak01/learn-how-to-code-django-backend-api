@@ -32,18 +32,6 @@ class Course(models.Model):
         except:
             return 0
         
-    # def get_modules(self):
-    #     return [
-    #         {
-    #             "id": module.id,
-    #             "name": module.name,
-    #             "order": module.order,
-    #             "is_visible": module.is_visible,
-    #             "lesson_count": module.get_lesson_count(),
-    #             "lessons": module.lessons
-    #         }
-    #         for module in self.modules.all().order_by("order")
-    #     ]
     
     def get_modules(self):
         """Retrieve all lessons with their details."""

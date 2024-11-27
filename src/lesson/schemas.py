@@ -10,8 +10,12 @@ class LessonCreateSchema(Schema):
 
 
 class LessonUpdateSchema(Schema):
+    id: Optional[int] = None
     topic: Optional[str] = None
     order: Optional[int] = None
+    introduction: Optional[LessonIntroductionSchema] = None
+    quiz: List[LessonQuizDetailSchema] = []
+    assignment: Optional[LessonAssignmentSchema] = None
 
 
 class LessonDetailSchema(Schema):
