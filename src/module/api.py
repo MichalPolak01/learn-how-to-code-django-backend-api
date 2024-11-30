@@ -1,11 +1,13 @@
 import json
 import traceback
+from typing import List
 from ninja import Query
 from ninja_extra import Router
 from openai import OpenAI
 from decouple import config
 
 from lesson.models import Lesson
+from lesson.schemas import LessonCreateSchema, LessonResponseSchema
 
 from .schemas import ModuleCreateSchema, ModuleUpdateSchema, ModuleDetailSchema
 from learn_how_to_code.schemas import MessageSchema
@@ -18,6 +20,8 @@ import helpers
 router = Router()
 
 
+from django.db import transaction
+
 @router.post("/{course_id}/modules", response={201: list[ModuleDetailSchema], 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def add_modules_with_lessons(
     request, 
@@ -25,42 +29,48 @@ def add_modules_with_lessons(
     course_id: int, 
     generate: bool = Query(False)
 ):
-    """Adds or replaces modules in a specific course. Optionally generates lessons for each module if `generate=true`."""
+    """
+    Adds or replaces modules in a specific course.
+    Optionally generates lessons for each module if `generate=true`.
+    """
 
     try:
         course = Course.objects.get(id=course_id, author=request.user)
 
-        course.modules.all().delete()
+        with transaction.atomic():
+            course.modules.all().delete()
 
-        created_modules = []
+            created_modules = []
 
-        for module_data in payload:
-            module_dict = module_data.dict()
-            module_dict["course"] = course
+            for module_data in payload:
+                module = Module.objects.create(
+                    course=course,
+                    name=module_data.name,
+                    order=module_data.order,
+                    is_visible=True,
+                )
+                created_modules.append(module)
 
-            module = Module.objects.create(**module_dict)
-            created_modules.append(module)
+                if generate:
+                    try:
+                        lessons_data = generate_lessons(course.name, course.description, module.name)
 
-            if generate:
-                try:
-                    lessons_data = generate_lessons(course.name, course.description, module.name)
+                        for index, lesson_data in enumerate(lessons_data):
+                            Lesson.objects.create(
+                                module=module,
+                                topic=lesson_data.topic,
+                                order=index + 1
+                            )
+                    except Exception as e:
+                        raise Exception(f"An error occurred while generating lessons: {str(e)}")
 
-                    for index, lesson_data in enumerate(lessons_data):
-                        Lesson.objects.create(
-                            module=module,
-                            topic=lesson_data["name"],
-                            order=index + 1
-                        )
-                except Exception as e:
-                    traceback.print_exc()
-                    return 500, {"message": f"An error occurred while generating lessons: {str(e)}"}
+            return 201, [module.to_dict() for module in created_modules]
 
-        return 201, [module.to_dict() for module in created_modules]
     except Course.DoesNotExist:
         return 404, {"message": f"Course with id {course_id} not found for the current user."}
     except Exception as e:
         traceback.print_exc()
-        return 500, {"message": "An unexpected error occurred while adding or replacing modules."}
+        return 500, {"message": f"An unexpected error occurred: {str(e)}"}
 
 
 @router.get('/{course_id}/modules', response={200: list[ModuleDetailSchema], 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
@@ -126,53 +136,36 @@ def delete_module(request, course_id: int, module_id: int):
         return 500, {"message": "An unexpected error occurred while deleting the module."}
     
 
-
-def generate_lessons(course_name: str, course_description: str, module_name: str, language: str = "polish") -> list[dict]:
-    """
-    Generates a list of lessons for a module based on the course and module information.
-    """
-
+def generate_lessons(course_name: str, course_description: str, module_name: str, language: str = "polish") -> List[LessonCreateSchema]:
+    """Generates a list of lessons for a module based on the course and module information."""
     client = OpenAI(api_key=config('OPENAI_API_KEY', cast=str))
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+        completion = client.beta.chat.completions.parse(
+            model=config('OPEN_API_MODEL', cast=str),
             messages=[
                 {
                     "role": "system",
                     "content": (
-                        f"You are an expert educational content generator. Respond only in JSON format with a list of objects. "
-                        f"Each object should represent a lesson and must include only one field: 'name'. "
-                        f"The 'name' field must contain a unique lesson title. Use {language} for all content."
+                        f"You are an educational content generator. Generate lesson topics in JSON format as a list of objects. "
+                        f"Language: {language}."
                     )
                 },
                 {
                     "role": "user",
                     "content": (
-                        f"Generate exactly 3 unique lesson titles for a module titled '{module_name}', "
-                        f"which is part of the course '{course_name}'. "
-                        f"The course is described as follows: {course_description}. "
-                        f"Your response should be a valid JSON array of objects with this structure:\n\n"
-                        f"[\n    {{ \"name\": \"Lesson Title 1\" }},\n    {{ \"name\": \"Lesson Title 2\" }},\n    {{ \"name\": \"Lesson Title 3\" }}\n]"
+                        f"Generate exactly 3 unique lesson topics for a module titled '{module_name}', "
+                        f"which is part of the course titled '{course_name}'. "
+                        f"The course is described as follows: {course_description}."
                     )
                 }
-            ]
+            ],
+            response_format=LessonResponseSchema,
         )
-        
-        result = response.choices[0].message.content.strip()
 
-        try:
-            parsed_result = json.loads(result)
-            
-            if isinstance(parsed_result, list) and all(isinstance(item, dict) and "name" in item for item in parsed_result):
-                return parsed_result
-            else:
-                raise ValueError("Invalid JSON structure: Missing 'name' fields or wrong format")
-        
-        except json.JSONDecodeError:
-            return [{"error": "Model did not return valid JSON format", "response": result}]
-        except ValueError as ve:
-            return [{"error": str(ve), "response": result}]
+        parsed_response = completion.choices[0].message.parsed
+
+        return parsed_response.modules
 
     except Exception as e:
-        raise Exception(f"Error during lesson generation: {str(e)}")
+        raise Exception(f"An error occurred while generating lessons: {str(e)}")

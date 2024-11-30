@@ -1,5 +1,5 @@
 from ninja import Schema
-from pydantic import EmailStr, Field, field_validator
+from pydantic import EmailStr, Field, field_validator, BaseModel
 from typing import List, Optional
 import re
 
@@ -8,6 +8,8 @@ from lesson_content.schemas import LessonAssignmentSchema, LessonIntroductionSch
 class LessonCreateSchema(Schema):
     topic: str
 
+class LessonResponseSchema(BaseModel):
+    modules: List[LessonCreateSchema]
 
 class LessonUpdateSchema(Schema):
     id: Optional[int] = None

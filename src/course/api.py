@@ -1,15 +1,17 @@
 import traceback
+from typing import List
 from ninja import Query, Router
+from django.db import transaction
 
 from lesson.models import Lesson
 from lesson_content.models import LessonAssignment, LessonIntroduction, LessonQuiz, QuizOption
+from module.schemas import ModuleCreateSchema, ModuleResponseSchema
 
 from .models import Course, Rating
 from module.models import Module
 from .schemas import CourseCreateSchema, CourseUpdateSchema, CourseDetailSchema, RatingSchema, CourseDeatilUpdateSchema
 from learn_how_to_code.schemas import MessageSchema
 import helpers
-import json
 
 from openai import OpenAI
 from decouple import config
@@ -17,10 +19,11 @@ from decouple import config
 
 router = Router()
 
+    
 @router.post("", response={201: CourseDetailSchema, 400: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def create_course(request, payload: CourseCreateSchema, generate: bool = Query(False)):
     """Create a new course. Optionally generates modules if param `generate=true` is provided in the URL."""
-
+    
     try:
         author = request.user
 
@@ -30,28 +33,30 @@ def create_course(request, payload: CourseCreateSchema, generate: bool = Query(F
         if Course.objects.filter(name=payload.name).exists():
             return 400, {"message": "A course with this name already exists."}
 
-        course_data = payload.dict()
-        course_data['author'] = author
+        with transaction.atomic():
+            course_data = payload.dict()
+            course_data['author'] = author
+            course = Course.objects.create(**course_data)
 
-        course = Course.objects.create(**course_data)
-
-        if generate:
-            try:
-                modules_data = generate_modules(course.name, course.description)
-                for index, module_data in enumerate(modules_data):
-                    Module.objects.create(
-                        course=course,
-                        name=module_data["name"],
-                        order=index + 1,
-                        is_visible=True
-                    )
-            except Exception as e:
-                return 500, {"message": f"An error occurred during module generation: {str(e)}"}
+            if generate:
+                try:
+                    modules_data = generate_modules(course.name, course.description)
+                    
+                    for index, module_data in enumerate(modules_data):
+                        Module.objects.create(
+                            course=course,
+                            name=module_data.name,
+                            order=index + 1,
+                            is_visible=True
+                        )
+                except Exception as e:
+                    raise Exception(f"Module generation failed: {str(e)}")
 
         return 201, course.to_dict()
+
     except Exception as e:
         traceback.print_exc()
-        return 500, {"message": "An unexpected error occurred during course creation."}
+        return 500, {"message": f"An unexpected error occurred during course creation: {str(e)}"}
     
     
 @router.get('', response={200: list[CourseDetailSchema], 400: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
@@ -166,113 +171,59 @@ def rate_course(request, course_id: int, payload: RatingSchema):
         return 500, {"message": "An unexpected error occurred during the course rating process."}
     
 
-
 @router.put("/{course_id}", response={200: CourseDetailSchema, 404: MessageSchema, 400: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def update_course(request, course_id: int, payload: CourseUpdateSchema):
-    """
-    Updates an entire course, including its modules, lessons, and their content.
-    """
+    """Updates an entire course."""
+
     try:
-        # Pobierz kurs i weryfikacja autora
         course = Course.objects.get(id=course_id, author=request.user)
         course.name = payload.name
         course.description = payload.description
         course.is_public = payload.is_public
+        course.creator_state = payload.creator_state
         course.save()
 
-        # Obsługa modułów
-        existing_module_ids = {module.id for module in course.modules.all()}
-        incoming_module_ids = {module.id for module in payload.modules if module.id is not None}
-
-        # Usuń moduły, które nie zostały przesłane w payload
-        Module.objects.filter(id__in=existing_module_ids - incoming_module_ids).delete()
+        course.modules.all().delete()
 
         for module_data in payload.modules:
-            # Obsługa istniejących lub nowych modułów
-            if module_data.id:
-                module = Module.objects.get(id=module_data.id, course=course)
-                module.name = module_data.name
-                module.order = module_data.order
-                module.is_visible = module_data.is_visible
-                module.save()
-            else:
-                module = Module.objects.create(
-                    course=course,
-                    name=module_data.name,
-                    order=module_data.order,
-                    is_visible=module_data.is_visible,
-                )
-
-            # Obsługa lekcji
-            existing_lesson_ids = {lesson.id for lesson in module.lessons.all()}
-            incoming_lesson_ids = {lesson.id for lesson in module_data.lessons if lesson.id is not None}
-
-            # Usuń lekcje, które nie zostały przesłane w payload
-            Lesson.objects.filter(id__in=existing_lesson_ids - incoming_lesson_ids).delete()
+            module = Module.objects.create(
+                course=course,
+                name=module_data.name,
+                order=module_data.order,
+                is_visible=module_data.is_visible,
+            )
 
             for lesson_data in module_data.lessons:
-                # Obsługa istniejących lub nowych lekcji
-                if lesson_data.id:
-                    lesson = Lesson.objects.get(id=lesson_data.id, module=module)
-                    lesson.topic = lesson_data.topic
-                    lesson.order = lesson_data.order
-                    lesson.save()
-                else:
-                    lesson = Lesson.objects.create(
-                        module=module,
-                        topic=lesson_data.topic,
-                        order=lesson_data.order,
-                    )
+                lesson = Lesson.objects.create(
+                    module=module,
+                    topic=lesson_data.topic,
+                    order=lesson_data.order,
+                )
 
-                # Obsługa wprowadzenia (LessonIntroduction)
                 if lesson_data.introduction:
-                    LessonIntroduction.objects.update_or_create(
+                    LessonIntroduction.objects.create(
                         lesson=lesson,
-                        defaults={"description": lesson_data.introduction.description},
+                        description=lesson_data.introduction.description,
                     )
 
-                # Obsługa quizów
                 if lesson_data.quiz:
-                    existing_quiz_ids = {quiz.id for quiz in lesson.lesson_quiz.all()}
-                    incoming_quiz_ids = {quiz.id for quiz in lesson_data.quiz if quiz.id is not None}
-
-                    # Usuń stare quizy
-                    LessonQuiz.objects.filter(id__in=existing_quiz_ids - incoming_quiz_ids).delete()
-
                     for quiz_data in lesson_data.quiz:
-                        if quiz_data.id:
-                            quiz = LessonQuiz.objects.get(id=quiz_data.id, lesson=lesson)
-                            quiz.question = quiz_data.question
-                            quiz.save()
-                        else:
-                            quiz = LessonQuiz.objects.create(
-                                lesson=lesson,
-                                question=quiz_data.question,
-                            )
-
-                        # Obsługa opcji quizów (QuizOption)
-                        existing_option_ids = {option.id for option in quiz.options.all()}
-                        incoming_option_ids = {option.id for option in quiz_data.answers if option.id is not None}
-
-                        # Usuń stare opcje
-                        QuizOption.objects.filter(id__in=existing_option_ids - incoming_option_ids).delete()
+                        quiz = LessonQuiz.objects.create(
+                            lesson=lesson,
+                            question=quiz_data.question,
+                        )
 
                         for option_data in quiz_data.answers:
-                            QuizOption.objects.update_or_create(
-                                id=option_data.id,
+                            QuizOption.objects.create(
                                 question=quiz,
-                                defaults={
-                                    "answer": option_data.answer,
-                                    "is_correct": option_data.is_correct,
-                                },
+                                answer=option_data.answer,
+                                is_correct=option_data.is_correct,
                             )
 
-                # Obsługa zadań (LessonAssignment)
                 if lesson_data.assignment:
-                    LessonAssignment.objects.update_or_create(
-                        id=lesson_data.assignment.id,
+                    LessonAssignment.objects.create(
                         lesson=lesson,
-                        defaults={"instructions": lesson_data.assignment.instructions},
+                        instructions=lesson_data.assignment.instructions,
                     )
 
         return 200, course.to_dict()
@@ -283,28 +234,35 @@ def update_course(request, course_id: int, payload: CourseUpdateSchema):
         return 500, {"message": f"An error occurred: {str(e)}"}
 
 
+def generate_modules(course_name: str, course_description: str, language: str = "polish") -> List[ModuleCreateSchema]:
+    """Generates module for course."""
 
-
-
-def generate_modules(course_name: str, course_description: str, language: str = "polish") -> list[dict]:
     client = OpenAI(api_key=config('OPENAI_API_KEY', cast=str))
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+        completion = client.beta.chat.completions.parse(
+            model=config('OPEN_API_MODEL', cast=str),
             messages=[
-                {"role": "system", "content": f"You are a module generator. Always respond in JSON format as a list of objects with 'name' field in {language}."},
-                {"role": "user", "content": f"Generate a list of 3 modules for a course titled '{course_name}' with the following description: {course_description}. Each module should be an object with a 'name' field."}
-            ]
+                {
+                    "role": "system",
+                    "content": (
+                        f"You are a module generator for programing course. Respond in JSON format as a list of module objects. "
+                        f"Language: {language}."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Generate 3 modules for a course titled '{course_name}' with the description: {course_description}."
+                    )
+                }
+            ],
+            response_format=ModuleResponseSchema,
         )
 
-        result = response.choices[0].message.content
+        parsed_response = completion.choices[0].message.parsed
 
-        try:
-            parsed_result = json.loads(result)
-            return parsed_result
-        except json.JSONDecodeError as e:
-            return [{"error": "Model did not return valid JSON format", "response": result}]
-    
+        return parsed_response.modules
+
     except Exception as e:
-        raise
+        raise Exception(f"An error occurred while generating modules: {str(e)}")

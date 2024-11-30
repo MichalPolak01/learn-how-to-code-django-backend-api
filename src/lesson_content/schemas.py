@@ -1,5 +1,6 @@
 from ninja import Schema
 from typing import List, Optional
+from pydantic import EmailStr, Field, field_validator, BaseModel
 
 
 class LessonIntroductionSchema(Schema):
@@ -23,6 +24,36 @@ class LessonQuizDetailSchema(Schema):
 class LessonAssignmentSchema(Schema):
     id: Optional[int] = None
     instructions: str
+
+
+
+class LessonIntroductionResponseSchema(BaseModel):
+    description: str
+
+
+class QuizOptionResponseSchema(BaseModel):
+    answer: str
+    is_correct: bool
+
+
+class LessonQuizResponseSchema(BaseModel):
+    question: str
+    answers: List[QuizOptionResponseSchema]
+
+
+class LessonAssignmentResponseSchema(BaseModel):
+    instructions: str
+
+
+class LessonContentSchema(BaseModel):
+    description: str
+    quiz: List[LessonQuizResponseSchema]
+    assignment: str
+
+    class Config:
+        schema_extra = {
+            "required": ["description", "quiz", "assignment"],
+        }
 
 class UserProgressSchema(Schema):
     lesson_id: int

@@ -1,5 +1,5 @@
 from ninja import Schema
-from pydantic import EmailStr, Field, field_validator
+from pydantic import EmailStr, Field, field_validator, BaseModel
 from typing import Optional, List
 import re
 
@@ -8,7 +8,10 @@ from lesson.schemas import LessonDetailSchema, LessonUpdateSchema
 class ModuleCreateSchema(Schema):
     name: str
     order: int
-    is_visible: Optional[bool] = True
+
+
+class ModuleResponseSchema(BaseModel):
+    modules: List[ModuleCreateSchema]
 
 
 class ModuleUpdateSchema(Schema):
