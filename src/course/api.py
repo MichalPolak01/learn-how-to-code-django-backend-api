@@ -9,7 +9,7 @@ from module.schemas import ModuleCreateSchema, ModuleResponseSchema
 
 from .models import Course, Rating
 from module.models import Module
-from .schemas import CourseCreateSchema, CourseUpdateSchema, CourseDetailSchema, RatingSchema, CourseDeatilUpdateSchema
+from .schemas import CourseCreateSchema, CourseUpdateSchema, CourseDetailSchema, RatingSchema, CourseDeatilUpdateSchema, CoursePreviewSchema
 from learn_how_to_code.schemas import MessageSchema
 import helpers
 
@@ -59,19 +59,31 @@ def create_course(request, payload: CourseCreateSchema, generate: bool = Query(F
         return 500, {"message": f"An unexpected error occurred during course creation: {str(e)}"}
     
     
-@router.get('', response={200: list[CourseDetailSchema], 400: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-def get_list_public_courses(request, option: str = None):
+@router.get('', response={200: list[CoursePreviewSchema], 400: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def get_list_public_courses(request, sortBy: str = None, limit: int = None):
     """Retrieves a list of all public courses. Or if param is `option=my` retrieves only my course."""
 
     try:
-        if option:
-            
-            if option == "my":
-                courses = Course.objects.filter(is_public=True)
-            else:
-                return 400, {"message": "Option is not valid."}
+        user = request.user
+
+        print(sortBy)
+      
+        if sortBy == "my":
+            courses = Course.objects.filter(author=user).order_by('-last_updated')
+        elif sortBy == "latest":
+            courses = Course.objects.filter(is_public=True).order_by('-last_updated')
+        elif sortBy == "highest-rated":
+            courses = Course.objects.filter(is_public=True).order_by('-rating')
+        elif sortBy == "most-popular":
+            courses = Course.objects.filter(is_public=True).order_by('-students')
         else:
-            courses = Course.objects.filter(author=request.user)
+            if sortBy is not None:
+                return 400, {"message": "Param is not valid. Choose from: 'my', 'latest', 'highest-rated', 'most-popular'."}
+            
+            courses = Course.objects.filter(is_public=True)
+        
+        if limit:
+            courses = courses[:limit]
 
         return 200, [CourseDetailSchema(**course.to_dict()) for course in courses]
     except Exception as e:
