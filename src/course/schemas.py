@@ -54,3 +54,9 @@ class RatingSchema(Schema):
 class CourseUpdateSchema(CourseCreateSchema):
     id: int
     modules: List[ModuleUpdateSchema] = []
+
+
+class StatsSchema(Schema):
+    courses_count: int
+    students_count: int
+    completed_lessons: int

@@ -60,3 +60,13 @@ class UserProgressSchema(Schema):
     quiz_score: float
     assignment_completed: bool
     assignment_score: float
+
+
+class CodeEvaluationRequestSchema(BaseModel):
+    lesson_id: int
+    user_code: str
+
+
+class CodeEvaluationResponseSchema(BaseModel):
+    assignment_score: float
+    message: str

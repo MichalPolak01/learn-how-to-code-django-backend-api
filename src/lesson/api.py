@@ -1,3 +1,5 @@
+import json
+from django.shortcuts import get_object_or_404
 from ninja import Query
 from ninja_extra import Router
 from django.db import transaction
@@ -8,10 +10,10 @@ from decouple import config
 from lesson_content.models import LessonAssignment, LessonIntroduction, LessonQuiz, QuizOption
 from lesson_content.schemas import LessonContentSchema
 
-from .schemas import LessonCreateSchema, LessonUpdateSchema, LessonDetailSchema
+from .schemas import LessonCreateSchema, LessonUpdateSchema, LessonDetailSchema, StudentProgressResponseSchema, StudentProgressSchema
 from learn_how_to_code.schemas import MessageSchema
 
-from .models import Lesson
+from .models import Lesson, StudentProgress
 from module.models import Module
 
 import helpers
@@ -108,20 +110,28 @@ def get_list_lessons_for_module(request, module_id: int):
         return 500, {"message": "An unexpected error occurred while retrieving list of lessons."}
     
 
-@router.get("lessons/{lesson_id}", response={200: LessonDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+@router.get("/lessons/{lesson_id}", response={200: LessonDetailSchema, 404: MessageSchema, 403: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def get_lesson(request, lesson_id: int):
-    """Retrieves details of a specific lesson."""
+    """Retrieves details of a specific lesson if the course is public or the user is the course author."""
 
     try:
-        lesson = Lesson.objects.get(id=lesson_id)
+        user = request.user
+
+        lesson = Lesson.objects.select_related("module").get(id=lesson_id)
+        course = lesson.module.course
+
+        if not course.is_public and course.author != user:
+            return 403, {"message": "You do not have permission to view this lesson."}
 
         return 200, lesson.to_dict()
+
     except Lesson.DoesNotExist:
         return 404, {"message": f"Lesson with id {lesson_id} not found."}
     except Exception as e:
         traceback.print_exc()
         return 500, {"message": "An unexpected error occurred while retrieving the lesson."}
-    
+
+
 
 @router.patch("lessons/{lesson_id}", response={200: LessonDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def update_lesson(request, payload: LessonUpdateSchema, lesson_id: int):
@@ -198,4 +208,104 @@ def generate_full_lesson_content(
 
     except Exception as e:
         raise Exception(f"Error during content generation: {str(e)}")
+
+
+@router.post("/student-progress", response={200: MessageSchema, 201: MessageSchema, 400: MessageSchema}, auth=helpers.auth_required)
+def add_or_update_student_progress(request, data: StudentProgressSchema):
+    """
+    Endpoint do dodawania lub aktualizowania danych postępów studenta.
+    """
+    try:
+        with transaction.atomic():
+            user = request.user
+            lesson = get_object_or_404(Lesson, id=data.lesson_id)
+
+            progress, created = StudentProgress.objects.get_or_create(
+                user=user,
+                lesson=lesson,
+                defaults={
+                    "introduction_completed": data.introduction_completed or False,
+                    "quiz_score": data.quiz_score,
+                    "assignment_score": data.assignment_score,
+                    "lesson_completed": False,
+                },
+            )
+
+            if not created:
+                if data.introduction_completed is not None:
+                    progress.introduction_completed = progress.introduction_completed or data.introduction_completed
+                if data.quiz_score is not None:
+                    progress.quiz_score = max(progress.quiz_score or 0, data.quiz_score)
+                if data.assignment_score is not None:
+                    progress.assignment_score = max(progress.assignment_score or 0, data.assignment_score)
+
+                if (
+                    progress.introduction_completed
+                    and (progress.quiz_score or 0) >= 70
+                    and (progress.assignment_score or 0) >= 70
+                ):
+                    progress.lesson_completed = True
+
+                    current_module = lesson.module
+                    next_lesson = current_module.lessons.filter(order__gt=lesson.order).order_by('order').first()
+
+                    if not next_lesson:
+                        next_module = current_module.course.modules.filter(order__gt=current_module.order).order_by('order').first()
+                        if next_module:
+                            next_lesson = next_module.lessons.order_by('order').first()
+
+                    if next_lesson:
+                        StudentProgress.objects.get_or_create(
+                            user=user,
+                            lesson=next_lesson,
+                            defaults={
+                                "introduction_completed": False,
+                                "quiz_score": None,
+                                "assignment_score": None,
+                                "lesson_completed": False,
+                            },
+                        )
+
+                progress.save()
+
+            return 201 if created else 200, {"message": "Progress added or updated successfully."}
+
+    except Exception as e:
+        traceback.print_exc()
+        return 400, {"message": f"Error: {str(e)}"}
+
+
+
+@router.get("/student-progress/{course_id}", response={200: list[StudentProgressResponseSchema], 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def get_student_progress(request, course_id: int):
+    """Retrieves progress for a student for all lessons in a given course."""
+
+    try:
+        user = request.user
+
+        modules = Module.objects.filter(course_id=course_id)
+        lessons = Lesson.objects.filter(module__in=modules)
+
+        progress_list = StudentProgress.objects.filter(user=user, lesson__in=lessons)
+
+        if not progress_list.exists():
+            return 404, {"message": f"No progress found for user {user.id} in course {course_id}."}
+
+        response_data = [
+            StudentProgressResponseSchema(
+                lesson_id=progress.lesson.id,
+                student=user.to_dict(),
+                introduction_completed=progress.introduction_completed,
+                quiz_score=progress.quiz_score,
+                assignment_score=progress.assignment_score,
+                lesson_completed=progress.lesson_completed,
+            )
+            for progress in progress_list
+        ]
+
+        return 200, response_data
+
+    except Exception as e:
+        traceback.print_exc()
+        return 500, {"message": f"An unexpected error occurred: {str(e)}"}
 

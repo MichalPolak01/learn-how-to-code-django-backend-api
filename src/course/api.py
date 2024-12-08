@@ -3,13 +3,14 @@ from typing import List
 from ninja import Query, Router
 from django.db import transaction
 
-from lesson.models import Lesson
+from authentication.models import User
+from lesson.models import Lesson, StudentProgress
 from lesson_content.models import LessonAssignment, LessonIntroduction, LessonQuiz, QuizOption
 from module.schemas import ModuleCreateSchema, ModuleResponseSchema
 
 from .models import Course, Rating
 from module.models import Module
-from .schemas import CourseCreateSchema, CourseUpdateSchema, CourseDetailSchema, RatingSchema, CourseDeatilUpdateSchema, CoursePreviewSchema
+from .schemas import CourseCreateSchema, CourseUpdateSchema, CourseDetailSchema, RatingSchema, CourseDeatilUpdateSchema, CoursePreviewSchema, StatsSchema
 from learn_how_to_code.schemas import MessageSchema
 import helpers
 
@@ -80,7 +81,10 @@ def get_list_public_courses(request, sortBy: str = None, limit: int = None):
             if sortBy is not None:
                 return 400, {"message": "Param is not valid. Choose from: 'my', 'latest', 'highest-rated', 'most-popular'."}
             
-            courses = Course.objects.filter(is_public=True)
+            public_courses = Course.objects.filter(is_public=True)
+            user_courses = Course.objects.filter(author=user)
+            courses = public_courses | user_courses
+            courses = courses.distinct()
         
         if limit:
             courses = courses[:limit]
@@ -90,20 +94,50 @@ def get_list_public_courses(request, sortBy: str = None, limit: int = None):
         return 500, {"message": "An unexpected error occurred while retrieving courses."}
     
 
-@router.get('/{course_id}', response={200: CourseDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-def get_public_course(request, course_id: int):
-    """Retrieves details of a specific public course by ID."""
+@router.get('/stats', response={200: StatsSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def get_public_course(request):
+    """Retrieves stats of all courses."""
 
     try:
-        course = Course.objects.get(id=course_id)
+        # course = Course.objects.get(id=course_id)
+
+        courses_count = Course.objects.filter().count()
+        students_count = User.objects.filter(role="USER").count()
+        completed_lessons = StudentProgress.objects.filter(lesson_completed=True).count()
         
-        return 200, course.to_dict()
+        return 200, {
+                "courses_count": courses_count,
+                "students_count": students_count,
+                "completed_lessons": completed_lessons
+        }
     except Course.DoesNotExist:
-        return 404, {"message": f"No public course found with id {course_id}."}
+        return 404, {"message": f"No public course found with id."}
     except Exception as e:
         traceback.print_exc()
         return 500, {"message": "An unexpected error occurred during course getting."}
-       
+   
+
+@router.get('/{course_id}', response={200: CourseDetailSchema, 404: MessageSchema, 403: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def get_public_course(request, course_id: int):
+    """Retrieves details of a specific public course by ID, or private course if the user is the author."""
+
+    try:
+        user = request.user
+
+        course = Course.objects.get(id=course_id)
+
+        if not course.is_public and course.author != user:
+            return 403, {"message": "You are not authorized to access this course."}
+
+        return 200, course.to_dict()
+
+    except Course.DoesNotExist:
+        return 404, {"message": f"No course found with id {course_id}."}
+    except Exception as e:
+        traceback.print_exc()
+        return 500, {"message": "An unexpected error occurred during course retrieval."}
+
+
 
 @router.patch('/{course_id}', response={200: CourseDetailSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def update_my_course(request, payload: CourseDeatilUpdateSchema, course_id: int):
@@ -147,18 +181,67 @@ def enroll_student(request, course_id: int):
     """Enrolls the authenticated user (student) in a public course."""
 
     try:
-        course = Course.objects.get(id=course_id, is_public=True)
+        with transaction.atomic():
+            course = Course.objects.get(id=course_id)
 
-        if request.user in course.students.all():
-            return 400, {"message": "Already enrolled in this course."}
-        
-        course.students.add(request.user)
+            if not course.is_public and course.author != request.user:
+                return 403, {"message": "You are not authorized to access this course."}
 
-        return 200, {"message": "Successfully enrolled in the course."}
+            if request.user in course.students.all():
+                return 400, {"message": "Already enrolled in this course."}
+
+            course.students.add(request.user)
+
+            first_module = course.modules.order_by('order').first()
+            if not first_module:
+                return 400, {"message": "The course does not contain any modules."}
+
+            first_lesson = first_module.lessons.order_by('order').first()
+            if not first_lesson:
+                return 400, {"message": "The first module does not contain any lessons."}
+
+            StudentProgress.objects.get_or_create(
+                user=request.user,
+                lesson=first_lesson,
+                defaults={
+                    "introduction_completed": False,
+                    "quiz_score": None,
+                    "assignment_score": None,
+                    "lesson_completed": False,
+                },
+            )
+
+            return 200, {"message": "Successfully enrolled in the course and progress initialized for the first lesson."}
     except Course.DoesNotExist:
         return 404, {"message": f"No public course found with id {course_id}."}
     except Exception as e:
+        traceback.print_exc()
         return 500, {"message": "An unexpected error occurred during enrollment in the course."}
+
+    
+@router.get('/{course_id}/is-enrolled', response={200: dict, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def is_student_enrolled(request, course_id: int):
+    """
+    Checks if the authenticated student is enrolled in a specific course.
+    """
+
+    try:
+        user = request.user
+
+        # if user.role != "STUDENT":
+        #     return 404, {"message": "Only students can check enrollment status."}
+
+        try:
+            course = Course.objects.get(id=course_id)
+        except Course.DoesNotExist:
+            return 404, {"message": f"No course found with id {course_id}."}
+
+        is_enrolled = course.students.filter(id=user.id).exists()
+
+        return 200, {"is_enrolled": is_enrolled}
+    except Exception as e:
+        traceback.print_exc()
+        return 500, {"message": "An unexpected error occurred while checking enrollment status."}
     
 
 @router.post('/{course_id}/rate', response={200: MessageSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)

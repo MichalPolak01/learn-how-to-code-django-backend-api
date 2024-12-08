@@ -1,14 +1,22 @@
+from gettext import translation
 from django.db import IntegrityError
+from django.shortcuts import get_object_or_404
 from ninja_extra import Router
 
 from openai import OpenAI
 from decouple import config
 
-from .schemas import LessonIntroductionSchema, LessonQuizSchema, LessonAssignmentSchema, LessonQuizDetailSchema
+from lesson.api import add_or_update_student_progress
+from lesson.schemas import StudentProgressSchema
+
+from .schemas import CodeEvaluationRequestSchema, CodeEvaluationResponseSchema, LessonIntroductionSchema, LessonQuizSchema, LessonAssignmentSchema, LessonQuizDetailSchema
 from learn_how_to_code.schemas import MessageSchema
 
 from .models import LessonIntroduction, LessonQuiz, QuizOption, LessonAssignment
 from lesson.models import Lesson
+
+from lesson.api import add_or_update_student_progress
+from lesson.schemas import StudentProgressSchema
 
 import helpers
 import json
@@ -59,8 +67,34 @@ def lesson_introduction(request, lesson_id: int, generate: bool = False, payload
     except Exception as e:
         traceback.print_exc()
         return 500, {"message": "An error occurred while handling the introduction."}
-
         
+
+# @router.get(
+#     '/{lesson_id}/introduction',
+#     response={200: LessonIntroductionSchema, 404: MessageSchema, 500: MessageSchema},
+#     auth=helpers.auth_required
+# )
+# def get_lesson_introduction(request, lesson_id: int):
+#     """
+#     Retrieve the introduction for the specified lesson.
+#     """
+#     try:
+#         lesson = Lesson.objects.get(id=lesson_id)
+
+#         lesson_introduction = LessonIntroduction.objects.filter(lesson=lesson).first()
+
+#         if not lesson_introduction:
+#             return 404, {"message": f"Introduction for lesson with id {lesson_id} not found."}
+
+#         return 200, lesson_introduction
+
+#     except Lesson.DoesNotExist:
+#         return 404, {"message": f"Lesson with id {lesson_id} not found."}
+#     except Exception as e:
+#         traceback.print_exc()
+#         return 500, {"message": "An error occurred while retrieving the introduction."}
+
+
 @router.post(
     '/{lesson_id}/quiz',
     response={201: LessonQuizDetailSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema},
@@ -289,3 +323,103 @@ def generate_assignment(lesson_name: str, language: str = "polish"):
             return [{"error": "Model did not return valid JSON format", "response": result}]
     except Exception as e:
         raise
+
+
+@router.post(
+    "/assignments/evaluate", 
+    response={200: CodeEvaluationResponseSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema}, 
+    auth=helpers.auth_required
+)
+def evaluate_assignment(request, data: CodeEvaluationRequestSchema):
+    """
+    Endpoint to evaluate a user's code for a specific lesson's assignment.
+    """
+    try:
+        lesson = get_object_or_404(Lesson, id=data.lesson_id)
+        assignment = get_object_or_404(LessonAssignment, lesson=lesson)
+        assignment_instructions = assignment.instructions
+
+        evaluation_result = evaluate_code_response(
+            assignment_instructions=assignment_instructions,
+            user_code=data.user_code,
+        )
+
+        student_progress_data = StudentProgressSchema(
+            lesson_id=lesson.id,
+            assignment_score=evaluation_result.assignment_score,
+        )
+
+        progress_status, progress_response = add_or_update_student_progress(
+            request=request,
+            data=student_progress_data,
+        )
+
+        if progress_status not in [200, 201]:
+            return 400, {
+                "message": "Evaluation completed, but failed to update student progress.",
+                "evaluation": evaluation_result.dict(),
+                "progress_response": progress_response,
+            }
+
+        return 200, evaluation_result
+
+    except Lesson.DoesNotExist:
+        return 404, {"message": f"Lesson with id {data.lesson_id} not found."}
+    except LessonAssignment.DoesNotExist:
+        return 404, {"message": f"No assignment found for lesson with id {data.lesson_id}."}
+    except Exception as e:
+        traceback.print_exc()
+        return 500, {"message": f"An unexpected error occurred: {str(e)}"}
+
+
+def evaluate_code_response(
+    assignment_instructions: str,
+    user_code: str,
+    language: str = "polish"
+) -> CodeEvaluationResponseSchema:
+    """
+    Evaluates a user's code against assignment instructions using AI.
+    """
+
+    client = OpenAI(api_key=config('OPENAI_API_KEY', cast=str))
+
+    try:
+        completion = client.beta.chat.completions.parse(
+            model=config("OPEN_API_MODEL", cast=str),
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        f"You are an AI programming assistant. Your task is to evaluate a user's code submission for a programming assignment. "
+                        f"Provide constructive feedback and a score based on correctness, optimization, and readability. "
+                        f"Ignore minor issues that do not affect the program's correctness or execution, such as variable names, minor typos in comments, or formatting inconsistencies, unless explicitly requested in the assignment. "
+                        f"Only focus on true coding errors (e.g., syntax errors, logical flaws, or deviations from the instructions). "
+                        f"If the code functions correctly but is not optimized, assign a score of approximately 75-80. "
+                        f"Respond in JSON format with the following keys:\n"
+                        f"1. 'assignment_score': A float between 0-100, where:\n"
+                        f"   - 100 is perfect, fully correct, optimized, and clean code.\n"
+                        f"   - Over 70 for correct but not optimized code.\n"
+                        f"   - Below 50 is for code with significant errors or incomplete functionality.\n"
+                        f"2. 'message': Constructive feedback formatted as a valid HTML string, suitable for display on a web page. "
+                        f"Use headings and bullet points for clarity.\n"
+                        f"Language: {language}."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Assignment Instructions:\n\n{assignment_instructions}\n\n"
+                        f"User Code:\n\n{user_code}\n\n"
+                        f"Evaluate the code, provide constructive feedback in HTML, and assign a score."
+                    )
+                }
+            ],
+            response_format=CodeEvaluationResponseSchema,
+        )
+
+        parsed_response = completion.choices[0].message.parsed
+
+        return parsed_response
+
+    except Exception as e:
+        raise Exception(f"An error occurred while evaluating the code: {str(e)}")

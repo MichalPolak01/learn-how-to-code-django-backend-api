@@ -48,10 +48,3 @@ class LessonAssignment(models.Model):
         }
 
 
-class UsserProgress(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE)
-    description_completed = models.BooleanField(default=False)
-    quiz_score = models.FloatField(null=True, blank=True)
-    assignment_completed = models.BooleanField(default=False)
-    assignment_score = models.FloatField(null=True, blank=True)

@@ -1,5 +1,6 @@
 from django.db import models
 
+from authentication.models import User
 from module.models import Module
 
 class Lesson(models.Model):
@@ -66,4 +67,25 @@ class Lesson(models.Model):
             "introduction": self.get_introduction(),
             "quiz": self.get_quizzes(),
             "assignment": self.get_assignment(),
+        }
+    
+
+class StudentProgress(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE)
+    introduction_completed = models.BooleanField(default=False)
+    quiz_score = models.FloatField(null=True, blank=True)
+    assignment_score = models.FloatField(null=True, blank=True)
+    lesson_completed = models.BooleanField(default=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "student": self.user,
+            "lesson": self.lesson,
+            "introduction_completed": self.introduction_completed,
+            "quiz_score": self.quiz_score,
+            "assignment_score": self.assignment_score,
+            "lesson_completed": self.lesson_completed
+
         }
