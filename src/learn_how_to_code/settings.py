@@ -10,6 +10,26 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+"""
+DEPLOY
+
+SECRET_KEY = config("DJANGO_SECRET_KEY", cast=str)
+
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = config("DJANGO_DEBUG", cast=bool, default=False)
+
+ALLOWED_HOSTS = ["*"]
+
+CORS_ALLOWED_ORIGINS = []
+CORS_TRUSTED_ORIGINS = []
+
+ENV_CORS_ALLOWED_ORIGINS = config("DJANGO_CORS_ALLOWED_ORIGINS", cast=str, default="")
+for origin in ENV_CORS_ALLOWED_ORIGINS.split(","):
+    CORS_ALLOWED_ORIGINS.append(f"{origin}".strip().lower())
+    CORS_TRUSTED_ORIGINS.append(f"{origin}".strip().lower())
+
+"""
+
 from pathlib import Path
 from datetime import timedelta
 
@@ -45,7 +65,8 @@ INSTALLED_APPS = [
     "ninja_extra",
     "ninja_jwt",
     
-    # Apps
+    # App
+    "learn_how_to_code",
     "authentication",
     "course",
     "module",
