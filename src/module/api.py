@@ -90,8 +90,6 @@ def get_module(request, course_id: int, module_id: int):
         module = Module.objects.get(id=module_id, course=course_id)
 
         return 200, module.to_dict()
-    except Course.DoesNotExist:
-        return 404, {"message": f"Course with id {course_id} not found."}
     except Module.DoesNotExist:
         return 404, {"message": f"Module with id {module_id} not found."}
     except Exception as e:

@@ -101,7 +101,7 @@ def get_list_lessons_for_module(request, module_id: int):
         return 500, {"message": "An unexpected error occurred while retrieving list of lessons."}
     
 
-@router.get("/lessons/{lesson_id}", response={200: LessonDetailSchema, 404: MessageSchema, 403: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+@router.get("/lessons/{lesson_id}", response={200: LessonDetailSchema, 403: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def get_lesson(request, lesson_id: int):
     """Retrieves details of a specific lesson if the course is public or the user is the course author."""
 
@@ -123,7 +123,7 @@ def get_lesson(request, lesson_id: int):
         return 500, {"message": "An unexpected error occurred while retrieving the lesson."}
 
 
-@router.patch("lessons/{lesson_id}", response={200: LessonDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+@router.patch("/lessons/{lesson_id}", response={200: LessonDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def update_lesson(request, payload: LessonUpdateSchema, lesson_id: int):
     """Update details of a specific lesson."""
 
@@ -142,7 +142,7 @@ def update_lesson(request, payload: LessonUpdateSchema, lesson_id: int):
         return 500, {"message": "An unexpected error occurred while updating the lesson."}
     
 
-@router.delete("lessons/{lesson_id}", response={200: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+@router.delete("/lessons/{lesson_id}", response={200: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def delete_lesson(request, lesson_id: int):
     """Deletes a specific lesson from a module."""   
 
@@ -217,7 +217,6 @@ def add_or_update_student_progress(request, data: StudentProgressSchema):
             return 201 if created else 200, {"message": "Progress added or updated successfully."}
 
     except Exception as e:
-        traceback.print_exc()
         return 400, {"message": f"Error: {str(e)}"}
 
 
