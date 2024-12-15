@@ -12,6 +12,7 @@ class CourseDetailSchema(Schema):
     id: int
     name: str
     description: str
+    image: str
     author: UserDetailSchema
     last_updated: str
     is_public: bool
@@ -25,6 +26,7 @@ class CourseDetailSchema(Schema):
 class CoursePreviewSchema(Schema):
     id: int
     name: str
+    image: str
     description: str
     author: UserDetailSchema
     last_updated: str
@@ -36,6 +38,7 @@ class CoursePreviewSchema(Schema):
 
 class CourseCreateSchema(Schema):
     name: str
+    image: str
     description: Optional[str] = ""
     is_public: Optional[bool] = False
     creator_state: str
@@ -46,10 +49,12 @@ class CourseDeatilUpdateSchema(Schema):
     description: Optional[str] = None
     is_public: Optional[bool] = None
     creator_state: Optional[str] = None
+    image: Optional[str] = None
 
 
 class RatingSchema(Schema):
     score: int
+
 
 class CourseUpdateSchema(CourseCreateSchema):
     id: int
@@ -60,3 +65,34 @@ class StatsSchema(Schema):
     courses_count: int
     students_count: int
     completed_lessons: int
+
+
+class GeneralProgressStatsSchema(Schema):
+    username: str
+    completed_lessons: int
+    started_assignments: int
+    started_quizzes: int
+    assignment_score_percentage: float
+    quiz_score_percentage: float
+    lesson_count: int
+
+
+class EnrolledCourseProgressSchema(Schema):
+    course_id: int
+    course_name: str
+    users_progress: List[GeneralProgressStatsSchema]
+
+
+class LessonProgressStatsSchema(Schema):
+    lesson_id: int
+    lesson_topic: str
+    completed_lessons: int
+    assignment_score_percentage: float
+    quiz_score_percentage: float
+    lesson_count: int
+
+
+class CourseProgressSchema(Schema):
+    course_id: int
+    course_name: str
+    lesson_progress: List[LessonProgressStatsSchema]

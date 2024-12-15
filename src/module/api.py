@@ -4,14 +4,13 @@ from typing import List
 from ninja import Query
 from ninja_extra import Router
 from openai import OpenAI
+from django.db import transaction
 from decouple import config
 
 from lesson.models import Lesson
 from lesson.schemas import LessonCreateSchema, LessonResponseSchema
-
 from .schemas import ModuleCreateSchema, ModuleUpdateSchema, ModuleDetailSchema
 from learn_how_to_code.schemas import MessageSchema
-
 from .models import Module
 from course.models import Course
 
@@ -20,8 +19,6 @@ import helpers
 router = Router()
 
 
-from django.db import transaction
-
 @router.post("/{course_id}/modules", response={201: list[ModuleDetailSchema], 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def add_modules_with_lessons(
     request, 
@@ -29,10 +26,7 @@ def add_modules_with_lessons(
     course_id: int, 
     generate: bool = Query(False)
 ):
-    """
-    Adds or replaces modules in a specific course.
-    Optionally generates lessons for each module if `generate=true`.
-    """
+    """ Adds or replaces modules in a specific course. Optionally generates lessons for each module if `generate=true`."""
 
     try:
         course = Course.objects.get(id=course_id, author=request.user)

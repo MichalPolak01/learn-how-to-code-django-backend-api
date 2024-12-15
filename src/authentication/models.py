@@ -22,7 +22,6 @@ class User(AbstractUser):
     EMAIL_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
 
-
     def to_dict(self):
         return {
             "id": self.id,

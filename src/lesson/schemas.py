@@ -1,16 +1,18 @@
 from ninja import Schema
-from pydantic import EmailStr, Field, field_validator, BaseModel
+from pydantic import BaseModel
 from typing import List, Optional
-import re
 
 from authentication.schemas import UserDetailSchema
 from lesson_content.schemas import LessonAssignmentSchema, LessonIntroductionSchema, LessonQuizDetailSchema
 
+
 class LessonCreateSchema(Schema):
     topic: str
 
+
 class LessonResponseSchema(BaseModel):
     modules: List[LessonCreateSchema]
+
 
 class LessonUpdateSchema(Schema):
     id: Optional[int] = None
@@ -28,7 +30,6 @@ class LessonDetailSchema(Schema):
     introduction: Optional[LessonIntroductionSchema] = None
     quiz: List[LessonQuizDetailSchema]
     assignment: Optional[LessonAssignmentSchema] = None
-
 
 
 class StudentProgressSchema(BaseModel):

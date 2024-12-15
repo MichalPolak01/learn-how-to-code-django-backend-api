@@ -1,8 +1,8 @@
-import json
 from django.shortcuts import get_object_or_404
 from ninja import Query
 from ninja_extra import Router
 from django.db import transaction
+import traceback
 
 from openai import OpenAI
 from decouple import config
@@ -12,27 +12,18 @@ from lesson_content.schemas import LessonContentSchema
 
 from .schemas import LessonCreateSchema, LessonUpdateSchema, LessonDetailSchema, StudentProgressResponseSchema, StudentProgressSchema
 from learn_how_to_code.schemas import MessageSchema
-
 from .models import Lesson, StudentProgress
 from module.models import Module
 
 import helpers
 
-import logging
-import traceback
-logger = logging.getLogger(__name__)
-
 router = Router()
 
 
 @router.post("/modules/{module_id}/lessons", response={201: list[LessonDetailSchema], 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
-def add_lessons_with_content(
-    request,
-    payload: list[LessonCreateSchema],
-    module_id: int,
-    generate: bool = Query(False)
-):
+def add_lessons_with_content(request, payload: list[LessonCreateSchema], module_id: int, generate: bool = Query(False)):
     """Adds lessons to a specific module. Optionally generates content for each lesson if param `generate=true`."""
+
     try:
         module = Module.objects.get(id=module_id)
 
@@ -132,7 +123,6 @@ def get_lesson(request, lesson_id: int):
         return 500, {"message": "An unexpected error occurred while retrieving the lesson."}
 
 
-
 @router.patch("lessons/{lesson_id}", response={200: LessonDetailSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def update_lesson(request, payload: LessonUpdateSchema, lesson_id: int):
     """Update details of a specific lesson."""
@@ -167,54 +157,10 @@ def delete_lesson(request, lesson_id: int):
         return 500, {"message": "An unexpected error occurred while deleting the lesson."}
 
 
-def generate_full_lesson_content(
-    lesson_name: str,
-    module_name: str,
-    course_name: str,
-    course_description: str,
-    language: str = "polish"
-) -> LessonContentSchema:
-    """Generates the full content for a lesson, including description, quiz, and assignment."""
-    client = OpenAI(api_key=config('OPENAI_API_KEY', cast=str))
-
-    try:
-        completion = client.beta.chat.completions.parse(
-            model=config('OPEN_API_MODEL', cast=str),
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        f"You are a professional educational content generator in language {language}. "
-                        "Create detailed content for a programming lesson. Respond in JSON format as a single object "
-                        "with keys 'description', 'quiz', and 'assignment'.\n\n"
-                        "- 'description': A detailed HTML-formatted explanation of the topic, including examples.\n"
-                        "- 'quiz': A list of 3 single-choice questions directly based on the lesson topic and description.\n"
-                        "- 'assignment': A clear and simple task description that does not include any sample or pre-filled code. "
-                        "Only provide task instructions for the student to implement on their own."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"Generate detailed content for a lesson titled '{lesson_name}' in the module '{module_name}', "
-                        f"which is part of the course '{course_name}' described as: '{course_description}'."
-                    )
-                }
-            ],
-            response_format=LessonContentSchema,
-        )
-
-        return completion.choices[0].message.parsed
-
-    except Exception as e:
-        raise Exception(f"Error during content generation: {str(e)}")
-
-
 @router.post("/student-progress", response={200: MessageSchema, 201: MessageSchema, 400: MessageSchema}, auth=helpers.auth_required)
 def add_or_update_student_progress(request, data: StudentProgressSchema):
-    """
-    Endpoint do dodawania lub aktualizowania danych postępów studenta.
-    """
+    """Adds or updates student progress in lesson."""
+
     try:
         with transaction.atomic():
             user = request.user
@@ -275,10 +221,9 @@ def add_or_update_student_progress(request, data: StudentProgressSchema):
         return 400, {"message": f"Error: {str(e)}"}
 
 
-
 @router.get("/student-progress/{course_id}", response={200: list[StudentProgressResponseSchema], 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def get_student_progress(request, course_id: int):
-    """Retrieves progress for a student for all lessons in a given course."""
+    """Retrieves progress for a student for all lessons in a given `course_id`."""
 
     try:
         user = request.user
@@ -309,3 +254,40 @@ def get_student_progress(request, course_id: int):
         traceback.print_exc()
         return 500, {"message": f"An unexpected error occurred: {str(e)}"}
 
+
+def generate_full_lesson_content(lesson_name: str, module_name: str, course_name: str, course_description: str, language: str = "polish") -> LessonContentSchema:
+    """Generates the full content for a lesson, including description, quiz, and assignment."""
+
+    client = OpenAI(api_key=config('OPENAI_API_KEY', cast=str))
+
+    try:
+        completion = client.beta.chat.completions.parse(
+            model=config('OPEN_API_MODEL', cast=str),
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        f"You are a professional educational content generator in language {language}. "
+                        "Create detailed content for a programming lesson. Respond in JSON format as a single object "
+                        "with keys 'description', 'quiz', and 'assignment'.\n\n"
+                        "- 'description': A detailed HTML-formatted explanation of the topic, including examples.\n"
+                        "- 'quiz': A list of 3 single-choice questions directly based on the lesson topic and description.\n"
+                        "- 'assignment': A clear and simple task description that does not include any sample or pre-filled code. "
+                        "Only provide task instructions for the student to implement on their own."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Generate detailed content for a lesson titled '{lesson_name}' in the module '{module_name}', "
+                        f"which is part of the course '{course_name}' described as: '{course_description}'."
+                    )
+                }
+            ],
+            response_format=LessonContentSchema,
+        )
+
+        return completion.choices[0].message.parsed
+
+    except Exception as e:
+        raise Exception(f"Error during content generation: {str(e)}")

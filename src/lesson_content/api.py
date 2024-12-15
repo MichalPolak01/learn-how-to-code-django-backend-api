@@ -1,29 +1,19 @@
-from gettext import translation
 from django.db import IntegrityError
 from django.shortcuts import get_object_or_404
 from ninja_extra import Router
-
 from openai import OpenAI
 from decouple import config
+import traceback
+import json
 
 from lesson.api import add_or_update_student_progress
 from lesson.schemas import StudentProgressSchema
-
 from .schemas import CodeEvaluationRequestSchema, CodeEvaluationResponseSchema, LessonIntroductionSchema, LessonQuizSchema, LessonAssignmentSchema, LessonQuizDetailSchema
 from learn_how_to_code.schemas import MessageSchema
-
 from .models import LessonIntroduction, LessonQuiz, QuizOption, LessonAssignment
 from lesson.models import Lesson
 
-from lesson.api import add_or_update_student_progress
-from lesson.schemas import StudentProgressSchema
-
 import helpers
-import json
-
-import logging
-import traceback
-logger = logging.getLogger(__name__)
 
 router = Router()
 
@@ -69,30 +59,28 @@ def lesson_introduction(request, lesson_id: int, generate: bool = False, payload
         return 500, {"message": "An error occurred while handling the introduction."}
         
 
-# @router.get(
-#     '/{lesson_id}/introduction',
-#     response={200: LessonIntroductionSchema, 404: MessageSchema, 500: MessageSchema},
-#     auth=helpers.auth_required
-# )
-# def get_lesson_introduction(request, lesson_id: int):
-#     """
-#     Retrieve the introduction for the specified lesson.
-#     """
-#     try:
-#         lesson = Lesson.objects.get(id=lesson_id)
+@router.get(
+    '/{lesson_id}/introduction',
+    response={200: LessonIntroductionSchema, 404: MessageSchema, 500: MessageSchema},
+    auth=helpers.auth_required
+)
+def get_lesson_introduction(request, lesson_id: int):
+    """Retrieve the introduction for the specified lesson."""
+    try:
+        lesson = Lesson.objects.get(id=lesson_id)
 
-#         lesson_introduction = LessonIntroduction.objects.filter(lesson=lesson).first()
+        lesson_introduction = LessonIntroduction.objects.filter(lesson=lesson).first()
 
-#         if not lesson_introduction:
-#             return 404, {"message": f"Introduction for lesson with id {lesson_id} not found."}
+        if not lesson_introduction:
+            return 404, {"message": f"Introduction for lesson with id {lesson_id} not found."}
 
-#         return 200, lesson_introduction
+        return 200, lesson_introduction
 
-#     except Lesson.DoesNotExist:
-#         return 404, {"message": f"Lesson with id {lesson_id} not found."}
-#     except Exception as e:
-#         traceback.print_exc()
-#         return 500, {"message": "An error occurred while retrieving the introduction."}
+    except Lesson.DoesNotExist:
+        return 404, {"message": f"Lesson with id {lesson_id} not found."}
+    except Exception as e:
+        traceback.print_exc()
+        return 500, {"message": "An error occurred while retrieving the introduction."}
 
 
 @router.post(
@@ -197,7 +185,6 @@ def lesson_assignment(request, lesson_id: int, generate: bool = False, payload: 
     except Exception as e:
         traceback.print_exc()
         return 500, {"message": "An error occurred while creating the assignment."}
-    
     
     
 def generate_introduction(lesson_name: str, language: str = "polish"):
@@ -377,9 +364,7 @@ def evaluate_code_response(
     user_code: str,
     language: str = "polish"
 ) -> CodeEvaluationResponseSchema:
-    """
-    Evaluates a user's code against assignment instructions using AI.
-    """
+    """Evaluates a user's code against assignment instructions using AI."""
 
     client = OpenAI(api_key=config('OPENAI_API_KEY', cast=str))
 

@@ -1,9 +1,9 @@
 from ninja import Schema
-from pydantic import EmailStr, Field, field_validator, BaseModel
+from pydantic import BaseModel
 from typing import Optional, List
-import re
 
 from lesson.schemas import LessonDetailSchema, LessonUpdateSchema
+
 
 class ModuleCreateSchema(Schema):
     name: str

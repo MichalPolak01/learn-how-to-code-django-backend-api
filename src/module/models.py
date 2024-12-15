@@ -2,6 +2,7 @@ from django.db import models
 
 from course.models import Course
 
+
 class Module(models.Model):
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='modules')
     name = models.CharField(max_length=255)
@@ -26,7 +27,6 @@ class Module(models.Model):
         """Retrieve all lessons with their details."""
         return [lesson.to_dict() for lesson in self.lessons.all().order_by("order")]
 
-        
     def to_dict(self):
         return {
             "id": self.id,

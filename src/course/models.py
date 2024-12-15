@@ -12,6 +12,7 @@ class Course(models.Model):
     rating = models.FloatField(default=0.0)
     students = models.ManyToManyField(User, related_name='enrolled_courses', blank=True)
     creator_state = models.CharField(max_length=60, default='update')
+    image = models.CharField(max_length=255, default='')
 
     def __str__(self):
         return self.name
@@ -19,20 +20,23 @@ class Course(models.Model):
     def get_student_count(self):
         return self.students.count()
     
-    def get_average_score(self):
-        ratings = self.ratings.all()
+    @staticmethod
+    def update_course_rating(course_id):
+        """Update course statistics."""
 
-        if ratings.exists():
-            return sum(rating.score for rating in ratings) / ratings.count()
-        return 0.0
+        course = Course.objects.get(id=course_id)
+        ratings = Rating.objects.filter(course=course)
+        
+        course.rating = sum(rating.score for rating in ratings) / ratings.count()
+        
+        course.save()
 
     def get_lesson_count(self):
         try:
-            return self.lesson.count()
+            return sum(module.lessons.count() for module in self.modules.all())
         except:
             return 0
         
-    
     def get_modules(self):
         """Retrieve all lessons with their details."""
         return [module.to_dict() for module in self.modules.all().order_by("order")]
@@ -45,11 +49,12 @@ class Course(models.Model):
             "author": self.author,
             "last_updated": self.last_updated.isoformat(),
             "is_public": self.is_public,
-            "rating": self.get_average_score,
+            "rating": self.rating,
             "student_count": self.get_student_count(),
             "lesson_count": self.get_lesson_count(),
             "modules": self.get_modules(),
-            "creator_state": self.creator_state
+            "creator_state": self.creator_state,
+            "image": self.image
         }
 
 

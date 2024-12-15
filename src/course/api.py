@@ -2,6 +2,7 @@ import traceback
 from typing import List
 from ninja import Query, Router
 from django.db import transaction
+from django.db.models import Count, Avg
 
 from authentication.models import User
 from lesson.models import Lesson, StudentProgress
@@ -10,13 +11,12 @@ from module.schemas import ModuleCreateSchema, ModuleResponseSchema
 
 from .models import Course, Rating
 from module.models import Module
-from .schemas import CourseCreateSchema, CourseUpdateSchema, CourseDetailSchema, RatingSchema, CourseDeatilUpdateSchema, CoursePreviewSchema, StatsSchema
+from .schemas import CourseCreateSchema, CourseProgressSchema, CourseUpdateSchema, CourseDetailSchema, GeneralProgressStatsSchema, LessonProgressStatsSchema, RatingSchema, CourseDeatilUpdateSchema, CoursePreviewSchema, StatsSchema, EnrolledCourseProgressSchema
 from learn_how_to_code.schemas import MessageSchema
 import helpers
 
 from openai import OpenAI
 from decouple import config
-
 
 router = Router()
 
@@ -76,7 +76,9 @@ def get_list_public_courses(request, sortBy: str = None, limit: int = None):
         elif sortBy == "highest-rated":
             courses = Course.objects.filter(is_public=True).order_by('-rating')
         elif sortBy == "most-popular":
-            courses = Course.objects.filter(is_public=True).order_by('-students')
+            courses = Course.objects.filter(is_public=True).annotate(student_count=Count('students')).order_by('-student_count')
+        elif sortBy == "enrolled":
+            courses = Course.objects.filter(students=user).order_by('-last_updated')
         else:
             if sortBy is not None:
                 return 400, {"message": "Param is not valid. Choose from: 'my', 'latest', 'highest-rated', 'most-popular'."}
@@ -84,13 +86,14 @@ def get_list_public_courses(request, sortBy: str = None, limit: int = None):
             public_courses = Course.objects.filter(is_public=True)
             user_courses = Course.objects.filter(author=user)
             courses = public_courses | user_courses
-            courses = courses.distinct()
+            courses = courses.distinct().order_by('-last_updated')
         
         if limit:
             courses = courses[:limit]
 
         return 200, [CourseDetailSchema(**course.to_dict()) for course in courses]
     except Exception as e:
+        traceback.print_exc()
         return 500, {"message": "An unexpected error occurred while retrieving courses."}
     
 
@@ -99,8 +102,6 @@ def get_public_course(request):
     """Retrieves stats of all courses."""
 
     try:
-        # course = Course.objects.get(id=course_id)
-
         courses_count = Course.objects.filter().count()
         students_count = User.objects.filter(role="USER").count()
         completed_lessons = StudentProgress.objects.filter(lesson_completed=True).count()
@@ -117,9 +118,24 @@ def get_public_course(request):
         return 500, {"message": "An unexpected error occurred during course getting."}
    
 
+@router.get('/enrolled', response={200: list[int], 500: MessageSchema}, auth=helpers.auth_required)
+def get_enrolled_courses(request):
+    """Retrieves list of IDs of all courses the user is enrolled in."""
+
+    try:
+        user = request.user
+
+        enrolled_course_ids = Course.objects.filter(students=user).values_list('id', flat=True)
+
+        return 200, list(enrolled_course_ids)
+    except Exception as e:
+        traceback.print_exc()
+        return 500, {"message": "An unexpected error occurred while retrieving enrolled courses."}
+
+
 @router.get('/{course_id}', response={200: CourseDetailSchema, 404: MessageSchema, 403: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def get_public_course(request, course_id: int):
-    """Retrieves details of a specific public course by ID, or private course if the user is the author."""
+    """Retrieves details of a specific public course by `course_id`, or private course if the user is the author."""
 
     try:
         user = request.user
@@ -138,10 +154,9 @@ def get_public_course(request, course_id: int):
         return 500, {"message": "An unexpected error occurred during course retrieval."}
 
 
-
 @router.patch('/{course_id}', response={200: CourseDetailSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def update_my_course(request, payload: CourseDeatilUpdateSchema, course_id: int):
-    """Updates details of a specific course created by the authenticated user."""
+    """Updates details of a specific course with `course_id` created by the authenticated user."""
 
     try:
         course = Course.objects.get(id=course_id, author=request.user)
@@ -178,7 +193,7 @@ def delete_my_course(request, course_id: int):
 
 @router.post('/{course_id}/enroll', response={200: MessageSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def enroll_student(request, course_id: int):
-    """Enrolls the authenticated user (student) in a public course."""
+    """Enrolls the authenticated user in a public course."""
 
     try:
         with transaction.atomic():
@@ -217,19 +232,14 @@ def enroll_student(request, course_id: int):
     except Exception as e:
         traceback.print_exc()
         return 500, {"message": "An unexpected error occurred during enrollment in the course."}
-
+    
     
 @router.get('/{course_id}/is-enrolled', response={200: dict, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def is_student_enrolled(request, course_id: int):
-    """
-    Checks if the authenticated student is enrolled in a specific course.
-    """
+    """Checks if the authenticated student is enrolled in a specific course."""
 
     try:
         user = request.user
-
-        # if user.role != "STUDENT":
-        #     return 404, {"message": "Only students can check enrollment status."}
 
         try:
             course = Course.objects.get(id=course_id)
@@ -249,20 +259,26 @@ def rate_course(request, course_id: int, payload: RatingSchema):
     """Allows an enrolled user to rate a public course."""
 
     try:
-        course = Course.objects.get(id=course_id, is_public=True)
+        course = Course.objects.get(id=course_id)
 
         if not course.students.filter(id=request.user.id).exists():
             return 400, {"message": "Only enrolled users can rate this course."}
         
-        Rating.objects.update_or_create(
-            course=course, user=request.user,
+        rating = Rating.objects.update_or_create(
+            course=course,
+            user=request.user,
             defaults={'score': payload.score}
         )
+
+        print(rating)
+
+        Course.update_course_rating(course_id)
 
         return 200, {"message": "Course rated successfully."}
     except Course.DoesNotExist:
         return 404, {"message": f"No public course found with id {course_id}."}
     except Exception as e:
+        traceback.print_exc
         return 500, {"message": "An unexpected error occurred during the course rating process."}
     
 
@@ -274,6 +290,7 @@ def update_course(request, course_id: int, payload: CourseUpdateSchema):
         course = Course.objects.get(id=course_id, author=request.user)
         course.name = payload.name
         course.description = payload.description
+        course.image = payload.image
         course.is_public = payload.is_public
         course.creator_state = payload.creator_state
         course.save()
@@ -327,6 +344,201 @@ def update_course(request, course_id: int, payload: CourseUpdateSchema):
     except Exception as e:
         traceback.print_exc()
         return 500, {"message": f"An error occurred: {str(e)}"}
+
+
+@router.get("/progress/general", response={200: list[GeneralProgressStatsSchema], 500: MessageSchema}, auth=helpers.auth_required)
+def get_general_progress_stats(request):
+    """Retrieves progress statistics for all students across all courses."""
+
+    try:
+        users = User.objects.all()
+
+        stats = []
+        for user in users:
+            progress = StudentProgress.objects.filter(user=user)
+            lessons = Lesson.objects.filter(studentprogress__user=user).distinct()
+
+            completed_lessons = progress.filter(lesson_completed=True).count()
+            started_assignments = progress.exclude(assignment_score__isnull=True).count()
+            started_quizzes = progress.exclude(quiz_score__isnull=True).count()
+
+            assignment_scores = progress.filter(assignment_score__isnull=False).aggregate(avg_score=Avg('assignment_score'))['avg_score'] or 0
+            quiz_scores = progress.filter(quiz_score__isnull=False).aggregate(avg_score=Avg('quiz_score'))['avg_score'] or 0
+
+            stats.append(
+                GeneralProgressStatsSchema(
+                    username=user.username,
+                    completed_lessons=completed_lessons,
+                    started_assignments=started_assignments,
+                    started_quizzes=started_quizzes,
+                    assignment_score_percentage=assignment_scores,
+                    quiz_score_percentage=quiz_scores,
+                    lesson_count=progress.count(),
+                )
+            )
+
+        return 200, stats
+
+    except Exception as e:
+        traceback.print_exc()
+        return 500, {"message": f"An unexpected error occurred: {str(e)}"}
+
+@router.get("/progress/enrolled", response={200: list[EnrolledCourseProgressSchema], 500: MessageSchema}, auth=helpers.auth_required)
+def get_progress_in_enrolled_courses(request):
+    """
+    Retrieves progress statistics for all participants in courses the authenticated user is enrolled in.
+    """
+    try:
+        user = request.user
+
+        enrolled_courses = Course.objects.filter(students=user)
+
+        if not enrolled_courses.exists():
+            return 200, []
+
+        response_data = []
+
+        for course in enrolled_courses:
+            lessons = Lesson.objects.filter(module__course=course)
+
+            users = User.objects.filter(studentprogress__lesson__in=lessons).distinct()
+
+            users_progress = []
+            for enrolled_user in users:
+                progress = StudentProgress.objects.filter(user=enrolled_user, lesson__in=lessons)
+
+                completed_lessons = progress.filter(lesson_completed=True).count()
+                started_assignments = progress.exclude(assignment_score__isnull=True).count()
+                started_quizzes = progress.exclude(quiz_score__isnull=True).count()
+
+                assignment_scores = progress.filter(assignment_score__isnull=False).aggregate(avg_score=Avg('assignment_score'))['avg_score'] or 0
+                quiz_scores = progress.filter(quiz_score__isnull=False).aggregate(avg_score=Avg('quiz_score'))['avg_score'] or 0
+
+                users_progress.append(
+                    GeneralProgressStatsSchema(
+                        username=enrolled_user.username,
+                        completed_lessons=completed_lessons,
+                        started_assignments=started_assignments,
+                        started_quizzes=started_quizzes,
+                        assignment_score_percentage=assignment_scores,
+                        quiz_score_percentage=quiz_scores,
+                        lesson_count=progress.count(),
+                    )
+                )
+
+            response_data.append(
+                EnrolledCourseProgressSchema(
+                    course_id=course.id,
+                    course_name=course.name,
+                    users_progress=users_progress
+                )
+            )
+
+        return 200, response_data
+
+    except Exception as e:
+        traceback.print_exc()
+        return 500, {"message": f"An unexpected error occurred: {str(e)}"}
+
+
+@router.get("/teacher/progress", response={200: List[CourseProgressSchema], 500: MessageSchema}, auth=helpers.auth_required)
+def get_teacher_course_progress(request):
+    """
+    Retrieves aggregated progress statistics for all courses authored by the teacher.
+    """
+    try:
+        user = request.user
+
+        courses = Course.objects.filter(author=user)
+
+        if not courses.exists():
+            return 200, []
+
+        response_data = []
+
+        for course in courses:
+            lessons = Lesson.objects.filter(module__course=course)
+
+            lesson_progress = []
+            for lesson in lessons:
+                progress = StudentProgress.objects.filter(lesson=lesson)
+
+                completed_lessons = progress.filter(lesson_completed=True).count()
+                assignment_scores = progress.filter(assignment_score__isnull=False).aggregate(
+                    avg_score=Avg('assignment_score')
+                )['avg_score'] or 0
+                quiz_scores = progress.filter(quiz_score__isnull=False).aggregate(
+                    avg_score=Avg('quiz_score')
+                )['avg_score'] or 0
+
+                lesson_progress.append(
+                    LessonProgressStatsSchema(
+                        lesson_id=lesson.id,
+                        lesson_topic=lesson.topic,
+                        completed_lessons=completed_lessons,
+                        assignment_score_percentage=assignment_scores,
+                        quiz_score_percentage=quiz_scores,
+                        lesson_count=progress.count(),
+                    )
+                )
+
+            response_data.append(
+                CourseProgressSchema(
+                    course_id=course.id,
+                    course_name=course.name,
+                    lesson_progress=lesson_progress,
+                )
+            )
+
+        return 200, response_data
+
+    except Exception as e:
+        traceback.print_exc()
+        return 500, {"message": f"An unexpected error occurred: {str(e)}"}
+
+
+@router.get("/{course_id}/progress", response={200: list[GeneralProgressStatsSchema], 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+def get_course_progress_stats(request, course_id: int):
+    """Retrieves progress statistics for all students in a specific course."""
+
+    try:
+        modules = Module.objects.filter(course_id=course_id)
+        lessons = Lesson.objects.filter(module__in=modules)
+
+        if not lessons.exists():
+            return 404, {"message": f"No lessons found for course {course_id}."}
+
+        users = User.objects.filter(studentprogress__lesson__in=lessons).distinct()
+
+        stats = []
+        for user in users:
+            progress = StudentProgress.objects.filter(user=user, lesson__in=lessons)
+
+            completed_lessons = progress.filter(lesson_completed=True).count()
+            started_assignments = progress.exclude(assignment_score__isnull=True).count()
+            started_quizzes = progress.exclude(quiz_score__isnull=True).count()
+
+            assignment_scores = progress.filter(assignment_score__isnull=False).aggregate(avg_score=Avg('assignment_score'))['avg_score'] or 0
+            quiz_scores = progress.filter(quiz_score__isnull=False).aggregate(avg_score=Avg('quiz_score'))['avg_score'] or 0
+
+            stats.append(
+                GeneralProgressStatsSchema(
+                    username=user.username,
+                    completed_lessons=completed_lessons,
+                    started_assignments=started_assignments,
+                    started_quizzes=started_quizzes,
+                    assignment_score_percentage=assignment_scores,
+                    quiz_score_percentage=quiz_scores,
+                    lesson_count=lessons.count(),
+
+                )
+            )
+
+        return 200, stats
+
+    except Exception as e:
+        traceback.print_exc()
+        return 500, {"message": f"An unexpected error occurred: {str(e)}"}
 
 
 def generate_modules(course_name: str, course_description: str, language: str = "polish") -> List[ModuleCreateSchema]:

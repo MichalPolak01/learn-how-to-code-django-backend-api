@@ -7,24 +7,27 @@ class LessonIntroductionSchema(Schema):
     id: Optional[int] = None
     description: str
 
+
 class QuizOptionSchema(Schema):
     id: Optional[int] = None
     answer: str
     is_correct: bool
 
+
 class LessonQuizSchema(Schema):
     question: str
     answers: List[QuizOptionSchema]
+
 
 class LessonQuizDetailSchema(Schema):
     id: Optional[int] = None
     question: str
     answers: List[QuizOptionSchema]
 
+
 class LessonAssignmentSchema(Schema):
     id: Optional[int] = None
     instructions: str
-
 
 
 class LessonIntroductionResponseSchema(BaseModel):
@@ -51,9 +54,10 @@ class LessonContentSchema(BaseModel):
     assignment: str
 
     class Config:
-        schema_extra = {
+        json_schema_extra  = {
             "required": ["description", "quiz", "assignment"],
         }
+
 
 class UserProgressSchema(Schema):
     lesson_id: int

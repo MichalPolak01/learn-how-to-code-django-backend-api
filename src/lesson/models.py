@@ -3,6 +3,7 @@ from django.db import models
 from authentication.models import User
 from module.models import Module
 
+
 class Lesson(models.Model):
     module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name='lessons')
     topic = models.CharField(max_length=255)
@@ -16,7 +17,6 @@ class Lesson(models.Model):
     def __str__(self):
         return f"{self.name} (Order: {self.order})"
 
-
     def get_introduction(self):
         """Retrieve the introduction of the lesson."""
         if hasattr(self, "lesson_introduction"):
@@ -26,7 +26,6 @@ class Lesson(models.Model):
             }
         return None
 
-    
     def get_quizzes(self) -> list:
         """Retrieve all quizzes associated with this lesson."""
         if hasattr(self, "lesson_quiz"):
@@ -53,9 +52,6 @@ class Lesson(models.Model):
             return {
                 "id": self.lesson_assignment.id,
                 "instructions": self.lesson_assignment.instructions,
-                # "started_count": self.assignment.started_count,
-                # "completed_count": self.assignment.completed_count,
-                # "average_score": self.assignment.average_score
             }
         return None
 
@@ -87,5 +83,4 @@ class StudentProgress(models.Model):
             "quiz_score": self.quiz_score,
             "assignment_score": self.assignment_score,
             "lesson_completed": self.lesson_completed
-
         }
