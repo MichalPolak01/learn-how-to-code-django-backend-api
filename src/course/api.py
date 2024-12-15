@@ -66,8 +66,6 @@ def get_list_public_courses(request, sortBy: str = None, limit: int = None):
 
     try:
         user = request.user
-
-        print(sortBy)
       
         if sortBy == "my":
             courses = Course.objects.filter(author=user).order_by('-last_updated')
@@ -79,9 +77,9 @@ def get_list_public_courses(request, sortBy: str = None, limit: int = None):
             courses = Course.objects.filter(is_public=True).annotate(student_count=Count('students')).order_by('-student_count')
         elif sortBy == "enrolled":
             courses = Course.objects.filter(students=user).order_by('-last_updated')
+        elif sortBy is not None:
+            return 400, {"message": "Param is not valid. Choose from: 'my', 'latest', 'highest-rated', 'most-popular'."}
         else:
-            if sortBy is not None:
-                return 400, {"message": "Param is not valid. Choose from: 'my', 'latest', 'highest-rated', 'most-popular'."}
             
             public_courses = Course.objects.filter(is_public=True)
             user_courses = Course.objects.filter(author=user)
@@ -112,7 +110,7 @@ def get_public_course(request):
                 "completed_lessons": completed_lessons
         }
     except Course.DoesNotExist:
-        return 404, {"message": f"No public course found with id."}
+        return 404, {"message": f"No stats found."}
     except Exception as e:
         traceback.print_exc()
         return 500, {"message": "An unexpected error occurred during course getting."}
@@ -191,7 +189,7 @@ def delete_my_course(request, course_id: int):
         return 500, {"message": "An unexpected error occurred while deleting the course."}
 
 
-@router.post('/{course_id}/enroll', response={200: MessageSchema, 400: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
+@router.post('/{course_id}/enroll', response={200: MessageSchema, 400: MessageSchema, 403: MessageSchema, 404: MessageSchema, 500: MessageSchema}, auth=helpers.auth_required)
 def enroll_student(request, course_id: int):
     """Enrolls the authenticated user in a public course."""
 
@@ -269,8 +267,6 @@ def rate_course(request, course_id: int, payload: RatingSchema):
             user=request.user,
             defaults={'score': payload.score}
         )
-
-        print(rating)
 
         Course.update_course_rating(course_id)
 
