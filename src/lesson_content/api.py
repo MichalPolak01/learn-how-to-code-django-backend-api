@@ -159,39 +159,38 @@ def lesson_assignment(request, lesson_id: int, generate: bool = False, payload: 
         lesson = Lesson.objects.get(id=lesson_id)
 
         if generate:
-            lesson = Lesson.objects.get(id=lesson_id)
-
             assignment_data = generate_assignment(lesson.topic)
 
-            lesson_assignment= LessonAssignment.objects.create(
+            lesson_assignment = LessonAssignment.objects.create(
                 lesson=lesson,
-                instructions=assignment_data['instruction']
+                instructions=assignment_data.instructions
             )
 
         else:
-            lesson_assignment= LessonAssignment.objects.create(
+            lesson_assignment = LessonAssignment.objects.create(
                 lesson=lesson,
                 instructions=payload.instructions
             )
-        
+
         return 201, lesson_assignment
     except Lesson.DoesNotExist:
         return 404, {"message": f"Lesson with id {lesson_id} not found."}
     except IntegrityError as e:
         if "unique constraint" in str(e).lower():
-            return 400, {"message": "A assignment for this lesson already exists. You cannot create another one."}
+            return 400, {"message": "An assignment for this lesson already exists. You cannot create another one."}
         else:
             return 400, {"message": "A database integrity error occurred."}
     except Exception as e:
         traceback.print_exc()
         return 500, {"message": "An error occurred while creating the assignment."}
+
     
     
 def generate_introduction(lesson_name: str, language: str = "polish"):
     try:
         client = OpenAI(api_key=config('OPENAI_API_KEY', cast=str))
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model=config("OPEN_API_MODEL", cast=str),
             messages=[
                 {
                     "role": "system",
@@ -227,7 +226,7 @@ def generate_quiz(lesson_name: str, language: str = "polish") -> dict:
     try:
         client = OpenAI(api_key=config('OPENAI_API_KEY', cast=str))
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model=config("OPEN_API_MODEL", cast=str),
             messages=[
                 {
                     "role": "system",
@@ -272,17 +271,19 @@ def generate_quiz(lesson_name: str, language: str = "polish") -> dict:
         raise
 
 
-def generate_assignment(lesson_name: str, language: str = "polish"):
+def generate_assignment(lesson_name: str, language: str = "polish") -> LessonAssignmentSchema:
     try:
         client = OpenAI(api_key=config('OPENAI_API_KEY', cast=str))
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+
+        # Poprawione wywołanie z użyciem beta.chat.completions.parse
+        completion = client.beta.chat.completions.parse(
+            model=config("OPEN_API_MODEL", cast=str),
             messages=[
                 {
                     "role": "system",
                     "content": (
                         f"You are an educational content creator skilled in creating structured assignments for students. "
-                        f"Respond only in JSON format with a single key 'instruction', containing the assignment instructions as plain HTML content. "
+                        f"Respond only in JSON format with a single key 'instructions', containing the assignment instructions as plain HTML content. "
                         f"Ensure that all instructions are clear, detailed, and well-formatted. Respond only with the JSON object, without any extra formatting or explanations. Use {language} for the response."
                     )
                 },
@@ -296,20 +297,19 @@ def generate_assignment(lesson_name: str, language: str = "polish"):
                         "- Provide a step-by-step guide, with each step wrapped in <li> tags inside an <ol> tag.\n"
                         "- If relevant, include example code snippets within <pre><code> tags to guide the student.\n"
                         "- Conclude with tips or advice in <em> tags, if necessary.\n\n"
-                        "Ensure that all HTML tags are semantically appropriate and the entire response is contained in the 'instruction' key."
+                        "Ensure that all HTML tags are semantically appropriate and the entire response is contained in the 'instructions' key."
                     )
                 }
-            ]
+            ],
+            response_format=LessonAssignmentSchema,
         )
-        result = response.choices[0].message.content
 
-        try:
-            parsed_result = json.loads(result)
-            return parsed_result
-        except json.JSONDecodeError as e:
-            return [{"error": "Model did not return valid JSON format", "response": result}]
+        parsed_response = completion.choices[0].message.parsed
+        return parsed_response
+
     except Exception as e:
-        raise
+        raise Exception(f"An error occurred while generating the assignment: {str(e)}")
+
 
 
 @router.post(
@@ -318,12 +318,10 @@ def generate_assignment(lesson_name: str, language: str = "polish"):
     auth=helpers.auth_required
 )
 def evaluate_assignment(request, data: CodeEvaluationRequestSchema):
-    """
-    Endpoint to evaluate a user's code for a specific lesson's assignment.
-    """
+    """Endpoint to evaluate a user's code for a specific lesson's assignment."""
     try:
-        lesson = get_object_or_404(Lesson, id=data.lesson_id)
-        assignment = get_object_or_404(LessonAssignment, lesson=lesson)
+        lesson = Lesson.objects.get(id=data.lesson_id)
+        assignment = LessonAssignment.objects.get(lesson=lesson)
         assignment_instructions = assignment.instructions
 
         evaluation_result = evaluate_code_response(
