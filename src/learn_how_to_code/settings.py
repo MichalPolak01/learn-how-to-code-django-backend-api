@@ -10,7 +10,30 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+"""
+DEPLOY
+
+SECRET_KEY = config("DJANGO_SECRET_KEY", cast=str)
+
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = config("DJANGO_DEBUG", cast=bool, default=False)
+
+ALLOWED_HOSTS = ["*"]
+
+CORS_ALLOWED_ORIGINS = []
+CORS_TRUSTED_ORIGINS = []
+
+ENV_CORS_ALLOWED_ORIGINS = config("DJANGO_CORS_ALLOWED_ORIGINS", cast=str, default="")
+for origin in ENV_CORS_ALLOWED_ORIGINS.split(","):
+    CORS_ALLOWED_ORIGINS.append(f"{origin}".strip().lower())
+    CORS_TRUSTED_ORIGINS.append(f"{origin}".strip().lower())
+
+"""
+
 from pathlib import Path
+from datetime import timedelta
+from decouple import config
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,12 +43,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-*k2e3oi8*94aoi08a6*3%_@nfu$d5m#!j1v%#2ifs)o2hv3+ur"
+# SECRET_KEY = "django-insecure-*k2e3oi8*94aoi08a6*3%_@nfu$d5m#!j1v%#2ifs)o2hv3+ur"
+SECRET_KEY = config("DJANGO_SECRET_KEY", cast=str)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# DEBUG = True
+DEBUG = config("DJANGO_DEBUG", cast=bool, default=False)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -37,9 +62,23 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+
+    # Libs
+    "corsheaders",
+    "ninja_extra",
+    "ninja_jwt",
+    
+    # App
+    "learn_how_to_code",
+    "authentication",
+    "course",
+    "module",
+    "lesson",
+    "lesson_content"
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -48,6 +87,28 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOWED_ORIGINS = []
+CORS_TRUSTED_ORIGINS = []
+
+ENV_CORS_ALLOWED_ORIGINS = config("DJANGO_CORS_ALLOWED_ORIGINS", cast=str, default="")
+for origin in ENV_CORS_ALLOWED_ORIGINS.split(","):
+    CORS_ALLOWED_ORIGINS.append(f"{origin}".strip().lower())
+    CORS_TRUSTED_ORIGINS.append(f"{origin}".strip().lower())
+
+
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:3000",
+#     "http://127.0.0.1:3000",
+# ]
+# CORS_TRUSTED_ORIGINS = [
+#     "http://localhost:3000",
+#     "http://127.0.0.1:3000",
+# ]
+
+AUTH_USER_MODEL = 'authentication.User'
 
 ROOT_URLCONF = "learn_how_to_code.urls"
 
@@ -73,12 +134,28 @@ WSGI_APPLICATION = "learn_how_to_code.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.sqlite3",
+#         "NAME": BASE_DIR / "db.sqlite3",
+#     }
+# }
+
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'NAME': config("DATABASE_NAME", cast=str),
+        'USER': config("DATABASE_USER", cast=str),
+        'PASSWORD': config("DATABASE_PASSWORD", cast=str),
+        'HOST': config("DATABASE_HOST", cast=str),
+        'PORT': config("DATABASE_PORT", cast=str),
+        'OPTIONS': {
+            'options': '-c search_path=learn_how_to_code'
+            # 'options': f'-c search_path={config("DATABASE_SCHEMA", cast=str)}'
+        },
     }
 }
+
 
 
 # Password validation
@@ -121,3 +198,14 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+NINJA_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=7),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=14),
+}
+
+NINJA_SETTINGS = {
+    "EXCEPTION_HANDLERS": {
+        "ValidationError": "learn_how_to_code.exception_handlers.validation_error_handler",
+    }
+}
