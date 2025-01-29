@@ -275,7 +275,6 @@ def generate_assignment(lesson_name: str, language: str = "polish") -> LessonAss
     try:
         client = OpenAI(api_key=config('OPENAI_API_KEY', cast=str))
 
-        # Poprawione wywołanie z użyciem beta.chat.completions.parse
         completion = client.beta.chat.completions.parse(
             model=config("OPEN_API_MODEL", cast=str),
             messages=[

@@ -199,13 +199,13 @@ class NinjaAuthenticationTestCase(TestCase):
 
     @pytest.mark.django_db
     def test_register_invalid_password_missing_lowercase_letter(self):
-        """Test register with missing uppercase letter in password"""
+        """Test register with missing lowercase letter in password"""
 
         # Arrange
         payload = {
             'username': 'AliceSmith21',
             'email': 'alicesmith21@gmail.com',
-            'password': 'alice123$',
+            'password': 'ALICE123$',
             'role': 'TEACHER'
         }
 
@@ -214,7 +214,7 @@ class NinjaAuthenticationTestCase(TestCase):
 
         # Assert
         assert response.status_code == 422
-        assert response.json()['detail'][0]['msg'] == 'Value error, Password must contain at least one uppercase letter.'
+        assert response.json()['detail'][0]['msg'] == 'Value error, Password must contain at least one lowercase letter.'
 
 
     @pytest.mark.django_db

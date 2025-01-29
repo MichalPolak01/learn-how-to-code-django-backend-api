@@ -298,7 +298,6 @@ class LessonContentApiTestCase(TestCase):
         assert response.status_code == 200
         assert "assignment_score" in response.json()
         assert "message" in response.json()
-        # Verify score is within range
         assert 0 <= response.json()["assignment_score"] <= 100
 
 
@@ -352,7 +351,7 @@ class LessonContentApiTestCase(TestCase):
         headers = {"Authorization": f"Bearer {access_token}"}
         payload = {
             "lesson_id": self.lesson.id,
-            "user_code": "def : pass"  # Invalid code
+            "user_code": "def : pass"
         }
 
         # Act
@@ -360,5 +359,5 @@ class LessonContentApiTestCase(TestCase):
 
         # Assert
         assert response.status_code == 200
-        assert response.json()["assignment_score"] < 50  # Expect a low score for invalid code
+        assert response.json()["assignment_score"] < 50
         assert "message" in response.json()

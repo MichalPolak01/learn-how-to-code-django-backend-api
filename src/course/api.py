@@ -295,6 +295,7 @@ def update_course(request, course_id: int, payload: CourseUpdateSchema):
 
         for module_data in payload.modules:
             module = Module.objects.create(
+                id=module_data.id,
                 course=course,
                 name=module_data.name,
                 order=module_data.order,
@@ -303,6 +304,7 @@ def update_course(request, course_id: int, payload: CourseUpdateSchema):
 
             for lesson_data in module_data.lessons:
                 lesson = Lesson.objects.create(
+                    id=lesson_data.id,
                     module=module,
                     topic=lesson_data.topic,
                     order=lesson_data.order,
@@ -310,6 +312,7 @@ def update_course(request, course_id: int, payload: CourseUpdateSchema):
 
                 if lesson_data.introduction:
                     LessonIntroduction.objects.create(
+                        id=lesson_data.introduction.id,
                         lesson=lesson,
                         description=lesson_data.introduction.description,
                     )
@@ -317,12 +320,14 @@ def update_course(request, course_id: int, payload: CourseUpdateSchema):
                 if lesson_data.quiz:
                     for quiz_data in lesson_data.quiz:
                         quiz = LessonQuiz.objects.create(
+                            id=quiz_data.id,
                             lesson=lesson,
                             question=quiz_data.question,
                         )
 
                         for option_data in quiz_data.answers:
                             QuizOption.objects.create(
+                                id=option_data.id,
                                 question=quiz,
                                 answer=option_data.answer,
                                 is_correct=option_data.is_correct,
@@ -330,6 +335,7 @@ def update_course(request, course_id: int, payload: CourseUpdateSchema):
 
                 if lesson_data.assignment:
                     LessonAssignment.objects.create(
+                        id=lesson_data.assignment.id,
                         lesson=lesson,
                         instructions=lesson_data.assignment.instructions,
                     )
